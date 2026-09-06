@@ -1,0 +1,157 @@
+from rest_framework import serializers
+
+from apps.core.models import College, Profile
+
+
+class CollegeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = College
+        fields = ["id", "name", "district", "state"]
+
+
+class ProfileResponseSerializer(serializers.ModelSerializer):
+    college = CollegeSerializer(read_only=True)
+    full_name = serializers.CharField(source="user.full_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    profile_views = serializers.SerializerMethodField()
+    whatsapp_contacts = serializers.SerializerMethodField()
+    active_listings_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = [
+            "id",
+            "user_id",
+            "full_name",
+            "email",
+            "image",
+            "phone_number",
+            "date_of_birth",
+            "college",
+            "city_location",
+            "profile_views",
+            "whatsapp_contacts",
+            "active_listings_count",
+        ]
+
+    def get_profile_views(self, obj):
+        from django.db.models import Sum
+        from apps.marketplace.models import ListingAnalyticsDaily
+        views = ListingAnalyticsDaily.objects.filter(
+            listing__seller=obj.user
+        ).aggregate(total=Sum("views_count"))["total"]
+        return views or 0
+
+    def get_whatsapp_contacts(self, obj):
+        from django.db.models import Sum
+        from apps.marketplace.models import ListingAnalyticsDaily
+        contacts = ListingAnalyticsDaily.objects.filter(
+            listing__seller=obj.user
+        ).aggregate(total=Sum("wa_contacts_count"))["total"]
+        return contacts or 0
+
+    def get_active_listings_count(self, obj):
+        from apps.marketplace.models import BookListing
+        return BookListing.objects.filter(
+            seller=obj.user, status=BookListing.Status.AVAILABLE
+        ).count()
+
+
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source="user.full_name", required=False)
+
+    class Meta:
+        model = Profile
+        fields = [
+            "id",
+            "full_name",
+            "image",
+            "phone_number",
+            "date_of_birth",
+            "bio",
+            "college",
+            "city_location",
+        ]
+
+    def validate_image(self, value):
+        if value:
+            if value.size > 5 * 1024 * 1024:  # 5 MB
+                raise serializers.ValidationError("Image size must not exceed 5 MB.")
+            if not value.content_type.startswith("image/"):
+                raise serializers.ValidationError("Only image files are allowed.")
+        return value
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop("user", None)
+        if user_data:
+            user = instance.user
+            full_name = user_data.get("full_name")
+            if full_name is not None:
+                user.full_name = full_name
+                user.save()
+        return super().update(instance, validated_data)
+
+
+class ProfileOnboardingSerializer(serializers.ModelSerializer):
+    USER_ROLE_CHOICES = (
+        ("STUDENT", "Student"),
+        ("TEACHER", "Teacher"),
+        ("PROFESSIONAL", "Professional"),
+        ("BOOK_LOVER", "Book Lover"),
+        ("OTHERS", "Others"),
+    )
+
+    BOOK_PREFERENCE_CHOICES = (
+        ("ACADEMIC", "Academic or Textbooks"),
+        ("COMPETETIVE", "Competitive Exams"),
+        ("FICTION", "Fiction"),
+        ("SELF_HELP", "Self Help"),
+        ("BUSINESS", "Business & Finance"),
+        ("COMIC", "Comics & Manga"),
+        ("NON_FICTION", "Non-Fiction"),
+        ("TECHNOLOGY", "Technology"),
+        ("OTHER", "Others"),
+    )
+
+    user_role = serializers.ChoiceField(choices=USER_ROLE_CHOICES)
+    book_preferences = serializers.ChoiceField(choices=BOOK_PREFERENCE_CHOICES)
+
+    college = CollegeSerializer(read_only=True)
+    college_id = serializers.PrimaryKeyRelatedField(
+        queryset=College.objects.all(),
+        source="college",
+        write_only=True,
+    )
+
+    class Meta:
+        model = Profile
+        fields = [
+            "user_role",
+            "college",
+            "college_id",
+            "book_preferences",
+        ]
+
+    def update(self, instance, validated_data):
+        # Remove non-model fields
+        user_role = validated_data.pop("user_role", None)
+        book_preferences = validated_data.pop("book_preferences", None)
+
+        # Update model fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        # Update JSONField
+        personalization = instance.personalization_fields or {}
+
+        if user_role is not None:
+            personalization["user_role"] = user_role
+
+        if book_preferences is not None:
+            personalization["book_preferences"] = book_preferences
+
+        instance.personalization_fields = personalization
+        instance.save()
+
+        return instance

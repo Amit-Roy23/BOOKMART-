@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookmart_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-bookmart_db}
+      POSTGRES_USER: ${DB_USER:-bookmart_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bookmart_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bookmart_user} -d ${DB_NAME:-bookmart_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bookmart_network
+
+  backend:
+    build:
+      context: ./bookmart-backend
+      dockerfile: Dockerfile
+    container_name: bookmart_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-un1rt-o2r0+7q^xhut2mrv279pvzq)jjjxx$2&odrq&73u@77n}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-127.0.0.1,localhost,backend,web,${HOST_IP:-192.168.1.102}}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://${HOST_IP:-192.168.1.102}:3000}
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=${DB_NAME:-bookmart_db}
+      - DB_USER=${DB_USER:-bookmart_user}
+      - DB_PASSWORD=${DB_PASSWORD:-bookmart_password}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-True}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL:-False}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-local}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME:-}
+      - AWS_S3_REGION_NAME=${AWS_S3_REGION_NAME:-us-east-1}
+      - GOOGLE_CLIENT_IDS=${GOOGLE_CLIENT_IDS:-}
+      - FACEBOOK_APP_ID=${FACEBOOK_APP_ID:-}
+      - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./bookmart-backend:/app
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    networks:
+      - bookmart_network
+
+  web:
+    build:
+      context: ./bookmart-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://${HOST_IP:-192.168.1.102}:8000/api/v1}
+    container_name: bookmart_web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - HOST_IP=${HOST_IP:-192.168.1.102}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://${HOST_IP:-192.168.1.102}:8000/api/v1}
+    depends_on:
+      - backend
+    networks:
+      - bookmart_network
+
+volumes:
+  postgres_data:
+  media_data:
+  static_data:
+
+networks:
+  bookmart_network:
+    driver: bridge

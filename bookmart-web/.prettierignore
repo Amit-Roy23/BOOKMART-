@@ -1,0 +1,17 @@
+# Cache folders
+.next/
+node_modules/
+dist/
+build/
+out/
+
+# Local parameters
+.env
+.env.local
+.env.production
+
+# Lockfiles and system records
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+.DS_Store

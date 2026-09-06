@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "Bookmart",
+    "slug": "bookmart",
+    "scheme": "bookmart",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#00000000",
+      "translucent": false
+    },
+    "android": {
+      "package": "com.bookmart.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDbMsdpuYY6LcJPn2UZ-rSs1iXAqiiQ84Q"
+        }
+      },
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"],
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-maps",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Bookmart to access your location to find nearest books.",
+          "locationWhenInUsePermission": "Allow Bookmart to access your location to find nearest books."
+        }
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-splash-screen",
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "831b228a-59fb-4a4b-a0a0-c820893168ac"
+      }
+    },
+    "owner": "bookmart-expo"
+  }
+}

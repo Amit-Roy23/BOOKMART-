@@ -1,0 +1,177 @@
+# 🚀 Walkthrough - Docker Orchestration & Mobile LAN Integration
+
+Complete Docker orchestration and network configuration for the Bookmart monorepo (`bookmart-backend`, `bookmart-web`, `bookmart-app`).
+
+---
+
+## 📋 What Was Accomplished
+
+### 1. Backend (`bookmart-backend/`)
+- **CORS Package & Settings**:
+  - Added `django-cors-headers==4.9.0` via `uv` to [`pyproject.toml`](file:///c:/Bookmart/bookmart-backend/pyproject.toml), [`uv.lock`](file:///c:/Bookmart/bookmart-backend/uv.lock), and [`requirements.txt`](file:///c:/Bookmart/bookmart-backend/requirements.txt).
+  - Configured `corsheaders` in `INSTALLED_APPS` and `corsheaders.middleware.CorsMiddleware` in `MIDDLEWARE` in [`settings.py`](file:///c:/Bookmart/bookmart-backend/bookmart/settings.py).
+  - Added safe credentials configuration (`CORS_ALLOW_CREDENTIALS = True`) with explicit `CORS_ALLOWED_ORIGINS` and local LAN regex support (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`) to prevent wildcards from breaking authenticated requests.
+- **Dynamic Network Hosts**:
+  - `ALLOWED_HOSTS` dynamically reads from environment variables, defaulting to `127.0.0.1,localhost,backend,web`.
+- **Dockerfile Line Endings Fix**:
+  - In [`Dockerfile`](file:///c:/Bookmart/bookmart-backend/Dockerfile), added `sed -i 's/\r$//' /app/entrypoint.sh` to prevent Windows CRLF line endings from breaking Alpine execution.
+- **Environment Documentation**:
+  - Created [`bookmart-backend/.env.example`](file:///c:/Bookmart/bookmart-backend/.env.example) documenting all backend variables.
+- **Standalone Compose Deprecation**:
+  - Renamed `bookmart-backend/docker-compose.yml` to [`bookmart-backend/docker-compose.standalone.yml`](file:///c:/Bookmart/bookmart-backend/docker-compose.standalone.yml) to avoid duplicate compose clashes with root.
+
+---
+
+### 2. Web Frontend (`bookmart-web/`)
+- **Next.js Standalone Configuration**:
+  - Updated [`next.config.ts`](file:///c:/Bookmart/bookmart-web/next.config.ts) with `output: 'standalone'` and dynamic `allowedDevOrigins`.
+- **Multi-Stage Dockerfile**:
+  - Created [`bookmart-web/Dockerfile`](file:///c:/Bookmart/bookmart-web/Dockerfile) implementing the standard 3-stage pattern (`deps` → `builder` → `runner` with non-root `nextjs:nodejs` user).
+  - Wired `ARG NEXT_PUBLIC_API_URL` into the `builder` stage so client-side JavaScript bundles inline the backend URL properly during `next build`.
+- **Docker Ignore & Env Template**:
+  - Created [`bookmart-web/.dockerignore`](file:///c:/Bookmart/bookmart-web/.dockerignore) and [`bookmart-web/.env.example`](file:///c:/Bookmart/bookmart-web/.env.example).
+
+---
+
+### 3. Mobile App (`bookmart-app/`)
+- **Dynamic Config Loading**:
+  - Updated [`src/constants/config.ts`](file:///c:/Bookmart/bookmart-app/src/constants/config.ts) to import `API_URL` from `@env` (via `react-native-dotenv`) with fallback.
+  - Updated [`src/api/clients.ts`](file:///c:/Bookmart/bookmart-app/src/api/clients.ts) to set `baseURL: CONFIG.API_URL`.
+- **TypeScript Types**:
+  - Created [`src/types/env.d.ts`](file:///c:/Bookmart/bookmart-app/src/types/env.d.ts) declaring module `@env`.
+- **Local Env Configuration**:
+  - Created [`bookmart-app/.env`](file:///c:/Bookmart/bookmart-app/.env) pointing to `http://192.168.1.102:8000/api/v1` and [`bookmart-app/.env.example`](file:///c:/Bookmart/bookmart-app/.env.example).
+  - Updated [`bookmart-app/.gitignore`](file:///c:/Bookmart/bookmart-app/.gitignore) to ignore `.env` while tracking `.env.example`.
+
+---
+
+### 4. Root Orchestration & Centralized Config (`Bookmart/`)
+- **Root Docker Compose**:
+  - Created [`docker-compose.yml`](file:///c:/Bookmart/docker-compose.yml) orchestrating:
+    1. `postgres` (PostgreSQL 16 Alpine, port 5432, persistent volume `postgres_data`, healthcheck `pg_isready`)
+    2. `backend` (Django DRF, port 8000, persistent volumes `media_data` & `static_data`, depends on healthy postgres)
+    3. `web` (Next.js 16 standalone, port 3000, depends on backend)
+    4. Bridge network `bookmart_network`
+- **Centralized Single Root `.env`**:
+  - Created [`.env`](file:///c:/Bookmart/.env) and [`.env.example`](file:///c:/Bookmart/.env.example) with `HOST_IP=192.168.1.102`.
+- **Top-Level Documentation**:
+  - Created [`README.md`](file:///c:/Bookmart/README.md) containing end-to-end instructions for spinning up Docker, creating superusers, finding LAN IP, and running the mobile app.
+
+---
+
+## 🧪 Verification Results
+
+1. **Docker Compose Syntax & Config**:
+   - `docker compose config --quiet` passed with exit code 0.
+2. **Package & Lock Integrity**:
+   - `django-cors-headers` verified in `pyproject.toml`, `uv.lock`, and `requirements.txt`.
+3. **Mobile TypeScript Resolution**:
+   - `CONFIG.API_URL` and `clients.ts` typechecked cleanly against `@env`.
+
+---
+
+## 🏃 Quick Start Guide
+
+### 1. Launch Docker Services (Postgres + Backend + Web)
+Open Docker Desktop on your machine, then run from `c:/Bookmart`:
+```bash
+docker compose up --build
+```
+- **Web**: [http://localhost:3000](http://localhost:3000) or [http://192.168.1.102:3000](http://192.168.1.102:3000)
+- **Backend API**: [http://localhost:8000/api/v1/](http://localhost:8000/api/v1/)
+- **Swagger Docs**: [http://localhost:8000/api/schema/swagger-ui/](http://localhost:8000/api/schema/swagger-ui/)
+
+### 2. Create Django Superuser
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+### 3. Run Mobile App (Expo Go on Physical Phone)
+```bash
+cd bookmart-app
+npx expo start
+```
+Scan the QR code with **Expo Go** (Android) or **Camera** (iOS).
+
+### 4. When Changing Wi-Fi Networks
+If your IP changes in the future:
+1. Update `HOST_IP=YOUR_NEW_IP` in root [`.env`](file:///c:/Bookmart/.env).
+2. Update `API_URL=http://YOUR_NEW_IP:8000/api/v1` in [`bookmart-app/.env`](file:///c:/Bookmart/bookmart-app/.env).
+3. Rebuild and start containers: `docker compose up --build -d`.
+
+
+
+
+
+
+Here is how to run the different parts of the Bookmart project:
+
+Option 1: Run with Docker Compose (Recommended)
+This starts the PostgreSQL Database, Django Backend, and Next.js Web Frontend in isolated containers.
+
+powershell
+# 1. Navigate to the root directory
+cd c:\Bookmart
+# 2. Build and start all containers in detached mode
+docker compose up --build -d
+# 3. Check status of the running containers
+docker compose ps
+# 4. View real-time logs (optional)
+docker compose logs -f
+Option 2: Run the Mobile App (
+
+bookmart-app
+) (Expo / React Native)
+Configure Environment Variables: In 
+
+/c:/Bookmart/bookmart-app/.env
+, set your computer's local Wi-Fi IP address so your physical phone running Expo Go or emulator can connect to the backend:
+
+env
+API_URL=http://<YOUR_LAN_IP>:8000/api/v1
+(Run ipconfig in terminal to find your IPv4 Address, e.g. 192.168.1.102)
+
+Start the Expo Development Server:
+
+powershell
+cd c:\Bookmart\bookmart-app
+npm install
+npm start
+Press a for Android Emulator
+Press w for Web
+Or scan the QR code using the Expo Go app on your physical mobile phone.
+Option 3: Run Services Locally Without Docker
+If you prefer running services directly on your host machine without Docker:
+
+1. Backend (Django REST API)
+powershell
+cd c:\Bookmart\bookmart-backend
+# Activate your virtualenv (if configured)
+# python -m venv venv; .\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+2. Web Frontend (Next.js)
+powershell
+cd c:\Bookmart\bookmart-web
+npm install
+npm run dev
+🌐 Access URLs & Ports
+Service	URL	Description
+Web App	http://localhost:3000	Next.js Storefront & Dashboard
+Backend API	http://localhost:8000/api/v1/	Django REST Framework Endpoints
+Swagger Docs	http://localhost:8000/docs/swagger/	Interactive API Documentation
+Django Admin	http://localhost:8000/admin/	Django Administration Panel
+PostgreSQL	localhost:5432	Database (bookmart_db)
+Useful Commands
+Stop Docker Containers:
+powershell
+docker compose down
+Stop and Remove Volumes (Reset DB data):
+powershell
+docker compose down -v
+Create Django Superuser in Docker:
+powershell
+docker compose exec backend python manage.py createsuperuser
+11:56 AM
+
