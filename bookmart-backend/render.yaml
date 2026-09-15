@@ -4,6 +4,7 @@ services:
     runtime: docker
     plan: free
     region: singapore
+    rootDir: bookmart-backend
     dockerfilePath: ./Dockerfile
     envVars:
       - key: DEBUG
@@ -56,6 +57,7 @@ services:
     runtime: docker
     plan: starter
     region: singapore
+    rootDir: bookmart-backend
     dockerfilePath: ./Dockerfile
     dockerCommand: uv run celery -A bookmart worker -l info
     envVars:
