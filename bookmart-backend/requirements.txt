@@ -8,10 +8,17 @@ attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
+boto3==1.43.89
+    # via bookmart-backend
+botocore==1.43.89
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.6.17
     # via
     #   cloudinary
     #   requests
+    #   sentry-sdk
 charset-normalizer==3.4.9
     # via requests
 cloudinary==1.45.0
@@ -30,6 +37,8 @@ django==6.0.6
     #   django-debug-toolbar
     #   django-filter
     #   django-import-export
+    #   django-redis
+    #   django-storages
     #   djangorestframework
     #   djangorestframework-simplejwt
     #   drf-nested-routers
@@ -43,6 +52,10 @@ django-debug-toolbar==7.0.0
 django-filter==25.2
     # via bookmart-backend
 django-import-export==4.4.1
+    # via bookmart-backend
+django-redis==7.0.0
+    # via bookmart-backend
+django-storages==1.14.6
     # via bookmart-backend
 django-templated-mail==1.1.1
     # via bookmart-backend
@@ -66,6 +79,10 @@ idna==3.18
     # via requests
 inflection==0.5.1
     # via drf-spectacular
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 jsonschema==4.26.0
     # via drf-spectacular
 jsonschema-specifications==2025.9.1
@@ -80,10 +97,16 @@ psycopg-binary==3.3.4 ; implementation_name != 'pypy'
     # via psycopg
 pyjwt==2.13.0
     # via djangorestframework-simplejwt
+python-dateutil==2.9.0.post0
+    # via botocore
 python-dotenv==1.2.2
     # via bookmart-backend
 pyyaml==6.0.3
     # via drf-spectacular
+redis==6.4.0
+    # via
+    #   bookmart-backend
+    #   django-redis
 referencing==0.37.0
     # via
     #   jsonschema
@@ -97,8 +120,14 @@ rpds-py==2026.5.1
     #   jsonschema
     #   referencing
 ruff==0.15.18
+s3transfer==0.19.2
+    # via boto3
+sentry-sdk==2.68.1
+    # via bookmart-backend
 six==1.17.0
-    # via cloudinary
+    # via
+    #   cloudinary
+    #   python-dateutil
 sqlparse==0.5.5
     # via
     #   django
@@ -107,6 +136,7 @@ tablib==3.9.0
     # via django-import-export
 typing-extensions==4.15.0 ; python_full_version < '3.13'
     # via
+    #   django-redis
     #   psycopg
     #   referencing
 tzdata==2026.2 ; sys_platform == 'win32'
@@ -117,7 +147,9 @@ uritemplate==4.2.0
     # via drf-spectacular
 urllib3==2.7.0
     # via
+    #   botocore
     #   cloudinary
     #   requests
+    #   sentry-sdk
 whitenoise==6.12.0
     # via bookmart-backend
