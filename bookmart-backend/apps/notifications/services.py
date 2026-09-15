@@ -1,10 +1,42 @@
 import logging
+import threading
+import requests
 
 from apps.authentication.models import User
 from apps.notifications.models import Notification
-from apps.notifications.tasks import send_expo_push_notifications_task
 
 logger = logging.getLogger(__name__)
+
+
+def _send_expo_push_notifications_async(
+    expo_tokens: list[str], title: str, body: str, extra_data: dict | None = None
+):
+    payload = []
+    for token in expo_tokens:
+        payload.append(
+            {
+                "to": token,
+                "sound": "default",
+                "title": title,
+                "body": body,
+                "data": extra_data or {},
+            }
+        )
+    try:
+        response = requests.post(
+            "https://exp.host/--/api/v2/push/send",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Accept-encoding": "gzip, deflate",
+            },
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.error(f"Failed to send push notifications: {response.text}")
+    except Exception as e:
+        logger.error(f"Failed to send push notifications: {str(e)}", exc_info=True)
 
 
 def create_notification(
@@ -33,12 +65,15 @@ def create_notification(
                 "reference_id": reference_id,
                 "reference_type": reference_type,
             }
-            send_expo_push_notifications_task.delay(tokens, title, body, extra_data)
+            threading.Thread(
+                target=_send_expo_push_notifications_async,
+                args=(tokens, title, body, extra_data),
+                daemon=True,
+            ).start()
     except Exception as e:
-        logger.error(f"Failed to enqueue push notification task: {str(e)}", exc_info=True)
+        logger.error(f"Failed to launch push notification thread: {str(e)}")
 
     return notif
-
 
 
 def bulk_create_notifications(
@@ -98,7 +133,7 @@ def notify_requirement_matched(requirement, listing) -> Notification | None:
     return create_notification(
         user=requirement.user,
         title="Requirement Matched",
-        body=f"A new listing matches your requirement for \"{requirement.book_title}\".",
+        body=f'A new listing matches your requirement for "{requirement.book_title}".',
         notification_type=Notification.NotificationType.REQUIREMENT_MATCH,
         reference_id=listing.id,
         reference_type="BookListing",
@@ -111,7 +146,7 @@ def notify_favorite_received(user: User, listing) -> Notification | None:
     return create_notification(
         user=listing.seller,
         title="New Favorite",
-        body=f"{user.full_name} favorited your listing \"{listing.book.title}\".",
+        body=f'{user.full_name} favorited your listing "{listing.book.title}".',
         notification_type=Notification.NotificationType.NEW_FAVORITE,
         reference_id=listing.id,
         reference_type="BookListing",
@@ -137,7 +172,7 @@ def notify_listing_sold(listing) -> Notification | None:
     return create_notification(
         user=listing.seller,
         title="Listing Sold",
-        body=f"Your listing \"{listing.book.title}\" has been marked as sold.",
+        body=f'Your listing "{listing.book.title}" has been marked as sold.',
         notification_type=Notification.NotificationType.LISTING_SOLD,
         reference_id=listing.id,
         reference_type="BookListing",

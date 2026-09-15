@@ -431,17 +431,8 @@ STORAGES = {
     },
 }
 
-# Celery & Redis Configuration
+# Redis Configuration
 REDIS_URL = os.getenv("REDIS_URL")
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL or "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", None)
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60
-CELERY_TASK_SOFT_TIME_LIMIT = 15 * 60
 
 # Caching Configuration (Redis backend via django-redis with fallback to LocMemCache)
 if REDIS_URL:
@@ -463,7 +454,7 @@ else:
         }
     }
 
-# Speed up test execution by using a fast password hasher, local cache, and eager Celery execution during tests
+# Speed up test execution by using a fast password hasher and local cache during tests
 if "test" in sys.argv or "test_coverage" in sys.argv:
     PASSWORD_HASHERS = [
         "django.contrib.auth.hashers.MD5PasswordHasher",
@@ -473,7 +464,5 @@ if "test" in sys.argv or "test_coverage" in sys.argv:
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
-    CELERY_TASK_ALWAYS_EAGER = True
-    CELERY_TASK_EAGER_PROPAGATES = True
 
 

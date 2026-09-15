@@ -255,10 +255,13 @@ class BookContactLedger(models.Model):
 def send_push_on_platform_notification(sender, instance, created, **kwargs):
     if created:
         try:
-            from apps.notifications.tasks import send_expo_push_notifications_task
+            from apps.notifications.services import _send_expo_push_notifications_async
 
+            # Query user's registered devices (connected via authentication Device model)
             tokens = list(instance.user.devices.values_list("expo_push_token", flat=True))
             if tokens:
+                import threading
+
                 extra_data = {
                     "id": instance.id,
                     "notification_type": instance.notification_type,
@@ -268,7 +271,11 @@ def send_push_on_platform_notification(sender, instance, created, **kwargs):
                 if instance.related_listing:
                     extra_data["related_listing_id"] = instance.related_listing.id
 
-                send_expo_push_notifications_task.delay(tokens, instance.title, instance.body, extra_data)
+                threading.Thread(
+                    target=_send_expo_push_notifications_async,
+                    args=(tokens, instance.title, instance.body, extra_data),
+                    daemon=True,
+                ).start()
         except Exception as e:
             import logging
 
