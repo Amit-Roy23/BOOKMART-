@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -11,6 +12,7 @@ User = get_user_model()
 
 class PasswordResetTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.user_email = "testreset@example.com"
         self.user_password = "old_password_123"
         self.user = User.objects.create_user(
@@ -71,6 +73,7 @@ class PasswordResetTests(APITestCase):
 
 class SocialAuthenticationTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.social_url = reverse("social-login")
         self.email = "socialuser@example.com"
         self.provider_id = "google-oauth2-id-12345"
@@ -158,4 +161,20 @@ class SocialAuthenticationTests(APITestCase):
         }
         response = self.client.post(self.social_url, payload)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class AuthThrottlingTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_login_throttling(self):
+        login_url = reverse("login")
+        # Throttle rate for login is 5/minute
+        for _ in range(5):
+            self.client.post(login_url, {"email": "dummy@test.com", "password": "wrong"})
+
+        # The 6th request must be throttled with HTTP 429 Too Many Requests
+        response = self.client.post(login_url, {"email": "dummy@test.com", "password": "wrong"})
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
 

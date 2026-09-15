@@ -1,6 +1,4 @@
-from django.db.models import Count, Avg, Q
-from django.db.models.functions import Cast
-from django.db.models import IntegerField
+from django.db.models import Avg
 
 from apps.authentication.models import User
 from apps.marketplace.models import BookListing

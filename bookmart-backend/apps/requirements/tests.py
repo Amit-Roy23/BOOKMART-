@@ -346,7 +346,7 @@ class BookRequirementAPITests(APITestCase):
     # ── List includes matching_count ──
     def test_list_includes_matching_count(self):
         book = Book.objects.create(title="Atomic Habits")
-        req = BookRequirement.objects.create(
+        BookRequirement.objects.create(
             user=self.owner, book=book, book_title="Atomic Habits", status="ACTIVE"
         )
         BookListing.objects.create(
@@ -387,7 +387,7 @@ class BookRequirementAPITests(APITestCase):
 
     # ── Nearby returns requirements within radius ──
     def test_nearby_returns_requirements_within_radius(self):
-        req1 = BookRequirement.objects.create(
+        BookRequirement.objects.create(
             user=self.owner,
             book_title="Near Book",
             status="ACTIVE",
@@ -432,14 +432,14 @@ class BookRequirementAPITests(APITestCase):
 
     # ── Nearby ordering by distance ──
     def test_nearby_ordering_by_distance(self):
-        req_near = BookRequirement.objects.create(
+        BookRequirement.objects.create(
             user=self.owner,
             book_title="Near Book",
             status="ACTIVE",
             latitude=Decimal("28.6140"),
             longitude=Decimal("77.2091"),
         )
-        req_far = BookRequirement.objects.create(
+        BookRequirement.objects.create(
             user=self.other_user,
             book_title="Far Book",
             status="ACTIVE",

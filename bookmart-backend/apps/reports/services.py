@@ -1,6 +1,5 @@
 from django.db import transaction
 
-from apps.marketplace.models import BookListing
 from apps.reports.models import Report
 
 # Base queryset with all necessary select_related to avoid N+1 queries

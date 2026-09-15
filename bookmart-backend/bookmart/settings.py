@@ -12,11 +12,15 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 import socket
+import sys
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+from whitenoise.storage import CompressedManifestStaticFilesStorage
 
 # Force IPv4 DNS resolution to avoid [Errno 101] Network unreachable on IPv4-only cloud hosts (e.g. Render / Alpine musl)
 _orig_getaddrinfo = socket.getaddrinfo
@@ -40,14 +44,46 @@ load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "django-insecure-un1rt-o2r0+7q^xhut2mrv279pvzq)jjjxx$2&odrq&73u@77n",
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
+
+# SECURITY WARNING: keep the secret key used in production secret!
+_INSECURE_DEFAULT_SECRET_KEYS = {
+    "django-insecure-un1rt-o2r0+7q^xhut2mrv279pvzq)jjjxx$2&odrq&73u@77n",
+    "your_secret_key_here",
+}
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = (
+            "django-insecure-un1rt-o2r0+7q^xhut2mrv279pvzq)jjjxx$2&odrq&73u@77n"
+        )
+    else:
+        raise ImproperlyConfigured(
+            "SECRET_KEY environment variable is required when DEBUG is False."
+        )
+elif not DEBUG and (
+    SECRET_KEY in _INSECURE_DEFAULT_SECRET_KEYS
+    or SECRET_KEY.startswith("django-insecure-")
+):
+    raise ImproperlyConfigured(
+        "Insecure default SECRET_KEY cannot be used when DEBUG is False."
+    )
+
+# Sentry Error Tracking & Performance Monitoring
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        send_default_pii=False,
+        environment=os.getenv(
+            "ENVIRONMENT", "production" if not DEBUG else "development"
+        ),
+    )
 
 allowed_hosts_env = os.getenv("ALLOWED_HOSTS")
 if allowed_hosts_env:
@@ -62,6 +98,18 @@ else:
         "web",
         ".onrender.com",
     ]
+
+# Production Security & SSL Hardening
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
 
 
 # Application definition
@@ -82,7 +130,6 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "import_export",
     "django_filters",
-    "debug_toolbar",
     "apps.core",
     "apps.authentication",
     "apps.books",
@@ -97,7 +144,6 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -110,6 +156,14 @@ MIDDLEWARE = [
     "apps.core.middleware.RequestResponseLoggerMiddleware",
 ]
 
+if DEBUG:
+    INSTALLED_APPS.append("debug_toolbar")
+    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    INTERNAL_IPS = [
+        "127.0.0.1",
+        "localhost",
+    ]
+
 # CORS Settings
 cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS")
 if cors_origins_env:
@@ -120,21 +174,21 @@ else:
     CORS_ALLOWED_ORIGINS = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:19006",
     ]
 
-# Regex patterns to allow local network IPs (e.g. 192.168.x.x, 10.x.x.x) during development
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://192\.168\.\d+\.\d+(:\d+)?$",
-    r"^http://10\.\d+\.\d+\.\d+(:\d+)?$",
-    r"^http://172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+(:\d+)?$",
-]
+# In development, allow local network IPs (e.g. 192.168.x.x, 10.x.x.x) for Expo / mobile testing
+if DEBUG:
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://192\.168\.\d+\.\d+(:\d+)?$",
+        r"^http://10\.\d+\.\d+\.\d+(:\d+)?$",
+        r"^http://172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+(:\d+)?$",
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
-
-INTERNAL_IPS = [
-    "127.0.0.1",
-    "localhost",
-]
 
 ROOT_URLCONF = "bookmart.urls"
 
@@ -165,11 +219,18 @@ CSRF_TRUSTED_ORIGINS = [
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+# DB_CONN_MAX_AGE controls persistent connections (defaults to 600s).
+# If connecting to a transaction-mode connection pooler like Supabase Supavisor (port 6543) or PgBouncer,
+# set DB_CONN_MAX_AGE=0 to let the pooler handle connection lifecycles without connection exhaustion.
+DB_CONN_MAX_AGE = int(os.getenv("DB_CONN_MAX_AGE", "600"))
+
+DATABASES: dict[str, Any]
+
 if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=DB_CONN_MAX_AGE,
             conn_health_checks=True,
         )
     }
@@ -182,10 +243,20 @@ else:
             "PASSWORD": os.getenv("DB_PASSWORD", "bookmart_password"),
             "HOST": os.getenv("DB_HOST", "localhost"),
             "PORT": os.getenv("DB_PORT", "5432"),
-            "CONN_MAX_AGE": 600,
+            "CONN_MAX_AGE": DB_CONN_MAX_AGE,
             "CONN_HEALTH_CHECKS": True,
+            "OPTIONS": {},
         }
     }
+
+if os.getenv("DISABLE_SERVER_SIDE_CURSORS", "False").lower() in (
+    "true",
+    "1",
+    "t",
+):
+    DATABASES["default"].setdefault("OPTIONS", {})[
+        "disable_server_side_cursors"
+    ] = True
 
 
 # Password validation
@@ -257,10 +328,19 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
-        "rest_framework.renderers.BrowsableAPIRenderer",
     ],
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.BookmartPagination",
     "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_CLASSES": [],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/minute",
+        "user": "1000/minute",
+        "login": "5/minute",
+        "register": "5/minute",
+        "otp_send": "3/minute",
+        "otp_verify": "5/minute",
+        "password_reset": "3/minute",
+    },
 }
 
 if DEBUG:
@@ -318,13 +398,12 @@ elif STORAGE_PROVIDER == "s3":
     AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
     AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "us-east-1")
     AWS_S3_CUSTOM_DOMAIN = os.getenv("AWS_S3_CUSTOM_DOMAIN")
+    AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL")  # e.g. https://<project-ref>.supabase.co/storage/v1/s3
     DEFAULT_STORAGE_BACKEND = "storages.backends.s3.S3Storage"
 else:
     DEFAULT_STORAGE_BACKEND = "django.core.files.storage.FileSystemStorage"
     MEDIA_URL = "media/"
     MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-
-from whitenoise.storage import CompressedManifestStaticFilesStorage
 
 
 class NonStrictCompressedManifestStaticFilesStorage(
@@ -352,13 +431,49 @@ STORAGES = {
     },
 }
 
-# Compatibility settings for legacy third-party libraries (like django-cloudinary-storage) under Django 6.0
-DEFAULT_FILE_STORAGE = DEFAULT_STORAGE_BACKEND
+# Celery & Redis Configuration
+REDIS_URL = os.getenv("REDIS_URL")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL or "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", None)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_SOFT_TIME_LIMIT = 15 * 60
 
-# Speed up test execution by using a fast password hasher during tests
-import sys
-if 'test' in sys.argv or 'test_coverage' in sys.argv:
+# Caching Configuration (Redis backend via django-redis with fallback to LocMemCache)
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "IGNORE_EXCEPTIONS": True,
+            },
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "bookmart-locmem-cache",
+        }
+    }
+
+# Speed up test execution by using a fast password hasher, local cache, and eager Celery execution during tests
+if "test" in sys.argv or "test_coverage" in sys.argv:
     PASSWORD_HASHERS = [
-        'django.contrib.auth.hashers.MD5PasswordHasher',
+        "django.contrib.auth.hashers.MD5PasswordHasher",
     ]
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
 

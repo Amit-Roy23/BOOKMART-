@@ -1,4 +1,3 @@
-from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -23,7 +22,6 @@ from apps.requirements.services import (
     create_requirement,
     get_active_requirements,
     get_nearby_requirements,
-    get_requirement_by_id,
     get_requirements_for_user,
     update_requirement,
 )

@@ -1,7 +1,5 @@
 import os
-import json
 import logging
-from datetime import datetime
 from django.conf import settings
 
 # Setup file logging

@@ -2,7 +2,6 @@ from django.db.models import Count, Exists, OuterRef, Value, BooleanField
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
-    OpenApiExample,
     OpenApiParameter,
     extend_schema,
     extend_schema_view,

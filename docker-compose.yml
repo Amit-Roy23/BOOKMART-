@@ -19,6 +19,22 @@ services:
     networks:
       - bookmart_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: bookmart_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - bookmart_network
+
   backend:
     build:
       context: ./bookmart-backend
@@ -38,6 +54,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-bookmart_password}
       - DB_HOST=postgres
       - DB_PORT=5432
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       - EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
       - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
@@ -60,10 +78,58 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./bookmart-backend:/app
       - media_data:/app/media
       - static_data:/app/staticfiles
+    networks:
+      - bookmart_network
+
+  celery_worker:
+    build:
+      context: ./bookmart-backend
+      dockerfile: Dockerfile
+    container_name: bookmart_celery
+    command: uv run celery -A bookmart worker -l info
+    restart: unless-stopped
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-un1rt-o2r0+7q^xhut2mrv279pvzq)jjjxx$2&odrq&73u@77n}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-127.0.0.1,localhost,backend,web,${HOST_IP:-192.168.1.102}}
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=${DB_NAME:-bookmart_db}
+      - DB_USER=${DB_USER:-bookmart_user}
+      - DB_PASSWORD=${DB_PASSWORD:-bookmart_password}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-True}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL:-False}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-local}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME:-}
+      - AWS_S3_REGION_NAME=${AWS_S3_REGION_NAME:-us-east-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./bookmart-backend:/app
+      - media_data:/app/media
     networks:
       - bookmart_network
 
@@ -89,6 +155,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   media_data:
   static_data:
 

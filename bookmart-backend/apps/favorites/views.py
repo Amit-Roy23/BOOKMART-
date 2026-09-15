@@ -1,7 +1,6 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiExample,
-    OpenApiParameter,
     extend_schema,
 )
 from rest_framework import permissions, status, views
@@ -218,7 +217,7 @@ class FavoriteAdminView(views.APIView):
     )
     def get(self, request, *args, **kwargs):
         from django.db.models import Q
-        from apps.marketplace.models import BookListing, Wishlist
+        from apps.marketplace.models import Wishlist
 
         qs = Wishlist.objects.select_related(
             "user", "listing", "listing__book", "listing__seller"

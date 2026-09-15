@@ -232,7 +232,6 @@ class GenreViewSetTests(APITestCase):
         )
         self.book_id = res.data["book_id"]
 
-        from apps.books.models import Book
         from apps.marketplace.models import BookListing
 
         book = Book.objects.get(id=self.book_id)
@@ -308,7 +307,6 @@ class BookViewSetTests(APITestCase):
             icon="📚",
         )
 
-        from apps.books.models import Book
         self.book1 = Book.objects.create(
             title="Quantitative Aptitude",
             published_date=date(2020, 1, 1),

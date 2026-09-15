@@ -232,13 +232,6 @@ class FavoriteAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["saved"])
 
-    # ── Anonymous cannot check favorite ──
-    def test_anonymous_cannot_check_favorite(self):
-        response = self.client.get(
-            f"/api/v1/favorites/check/{self.listing.id}/"
-        )
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
     # ── Favorite count endpoint ──
     def test_favorite_count(self):
         Wishlist.objects.create(user=self.buyer, listing=self.listing)

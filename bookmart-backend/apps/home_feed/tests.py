@@ -1,6 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
-from django.db.models import Count
 
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -276,7 +274,7 @@ class HomeFeedTests(APITestCase):
 
     def test_popular_books_ordered_by_favorite_count(self):
         listing1 = self._create_listing()
-        listing2 = self._create_listing()
+        self._create_listing()
 
         from apps.marketplace.models import Wishlist
         Wishlist.objects.create(user=self.buyer, listing=listing1)
@@ -327,7 +325,7 @@ class HomeFeedTests(APITestCase):
         ]:
             ids = [item["id"] for item in response.data[section]]
             self.assertEqual(
-                role_response := len(ids),
+                len(ids),
                 len(set(ids)),
                 f"Duplicate listings found within {section}",
             )

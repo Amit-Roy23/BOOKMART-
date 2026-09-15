@@ -1,18 +1,12 @@
 import logging
-import threading
 
 from django.conf import settings
-from templated_mail.mail import BaseEmailMessage
-
 from apps.authentication.models import User
+from apps.authentication.tasks import send_otp_email_task
 
 logger = logging.getLogger(__name__)
 
 
-# LOCAL DEVELOPMENT ONLY
-# When SMTP is not configured, this service prints the OTP to the Django
-# terminal instead of attempting delivery. Remove or guard this fallback
-# if you do not want OTPs exposed in local logs.
 def _is_smtp_configured() -> bool:
     return bool(
         getattr(settings, "EMAIL_HOST", None)
@@ -23,24 +17,10 @@ def _is_smtp_configured() -> bool:
 
 class EmailNotificationService:
     @staticmethod
-    def _send_email_async(email: str, template_name: str, context: dict):
-        try:
-            msg = BaseEmailMessage(
-                template_name=template_name,
-                context=context,
-            )
-            msg.send([email])
-        except Exception as e:
-            logger.error(
-                f"Failed to dispatch transactional mail to {email}. Error: {str(e)}",
-                exc_info=True,
-            )
-
-    @staticmethod
     def send_otp_email(user: User, otp_code: str, purpose="ACTIVATION") -> bool:
         """
         Dispatches a transactional HTML email containing the security verification OTP
-        in a background thread to prevent HTTP request blocking.
+        asynchronously via Celery task queue with automatic retries.
         """
         if not _is_smtp_configured():
             print(
@@ -53,22 +33,25 @@ class EmailNotificationService:
             )
             return True
 
-        subject = (
-            "Verify your Bookmart Account"
-            if purpose == "ACTIVATION"
-            else "Reset your Bookmart Password"
-        )
-
-        context = {
-            "full_name": user.full_name,
-            "otp_code": otp_code,
-            "subject": subject,
-        }
-
-        thread = threading.Thread(
-            target=EmailNotificationService._send_email_async,
-            args=(user.email, "emails/otp_notification.html", context),
-            daemon=True,
-        )
-        thread.start()
-        return True
+        try:
+            send_otp_email_task.delay(
+                email=user.email,
+                full_name=user.full_name,
+                otp_code=otp_code,
+                purpose=purpose,
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to queue OTP email task for {user.email}: {e}", exc_info=True)
+            # Graceful fallback: send directly if worker/broker connection failed in non-strict env
+            try:
+                send_otp_email_task(
+                    email=user.email,
+                    full_name=user.full_name,
+                    otp_code=otp_code,
+                    purpose=purpose,
+                )
+                return True
+            except Exception as fallback_err:
+                logger.error(f"Synchronous fallback failed for {user.email}: {fallback_err}", exc_info=True)
+                return False

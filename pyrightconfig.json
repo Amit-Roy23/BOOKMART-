@@ -1,0 +1,13 @@
+{
+  "venvPath": "bookmart-backend",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "bookmart-backend",
+      "extraPaths": [
+        "bookmart-backend",
+        "bookmart-backend/apps"
+      ]
+    }
+  ]
+}

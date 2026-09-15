@@ -4,11 +4,13 @@ from rest_framework_simplejwt import tokens
 
 from apps.authentication import serializers, services
 from apps.authentication.models import EmailOTP, User
+from apps.core.throttles import OTPSendRateThrottle, OTPVerifyRateThrottle
 
 
 class VerifyResetOTPView(views.APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [OTPVerifyRateThrottle]
     serializer_class = serializers.ResetPasswordSerializer
 
     @extend_schema(
@@ -54,11 +56,11 @@ class VerifyResetOTPView(views.APIView):
         )
 
 
-
 class VerifyOTPView(views.APIView):
     queryset = EmailOTP.objects.all()
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [OTPVerifyRateThrottle]
     serializer_class = serializers.OTPSerializer
 
     @extend_schema(
@@ -107,6 +109,7 @@ class VerifyOTPView(views.APIView):
 class ResendOTPView(views.APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [OTPSendRateThrottle]
     serializer_class = serializers.ForgotPasswordSerializer
 
     @extend_schema(

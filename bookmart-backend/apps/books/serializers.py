@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.books.models import Author, Book, Genre, Review
+from apps.books.models import Author, Genre, Review
 
 
 class GenreListSerializer(serializers.ModelSerializer):

@@ -1,5 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Count
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 

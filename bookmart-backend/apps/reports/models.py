@@ -74,5 +74,5 @@ class Report(models.Model):
 
     def __str__(self):
         target = self.reported_listing_id or self.reported_user_id
-        return f"Report #{self.id} ({self.report_type}) by {self.reporter_id} — {self.reason}"
+        return f"Report #{self.id} ({self.report_type}) target={target} by {self.reporter_id} — {self.reason}"
 

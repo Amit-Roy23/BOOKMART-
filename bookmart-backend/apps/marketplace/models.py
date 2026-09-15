@@ -1,8 +1,10 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
 from django.contrib.contenttypes.fields import GenericRelation
+from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 from apps.books.models import Book
 
@@ -249,18 +251,14 @@ class BookContactLedger(models.Model):
         ordering = ["-transaction_date"]
 
 
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-
 @receiver(post_save, sender=PlatformNotification)
 def send_push_on_platform_notification(sender, instance, created, **kwargs):
     if created:
         try:
-            from apps.notifications.services import _send_expo_push_notifications_async
-            # Query user's registered devices (connected via authentication Device model)
+            from apps.notifications.tasks import send_expo_push_notifications_task
+
             tokens = list(instance.user.devices.values_list("expo_push_token", flat=True))
             if tokens:
-                import threading
                 extra_data = {
                     "id": instance.id,
                     "notification_type": instance.notification_type,
@@ -269,14 +267,11 @@ def send_push_on_platform_notification(sender, instance, created, **kwargs):
                 }
                 if instance.related_listing:
                     extra_data["related_listing_id"] = instance.related_listing.id
-                
-                threading.Thread(
-                    target=_send_expo_push_notifications_async,
-                    args=(tokens, instance.title, instance.body, extra_data),
-                    daemon=True
-                ).start()
+
+                send_expo_push_notifications_task.delay(tokens, instance.title, instance.body, extra_data)
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error triggering push notification on PlatformNotification creation: {str(e)}")
 

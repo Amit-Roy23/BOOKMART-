@@ -1,13 +1,14 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiExample,
-    OpenApiParameter,
     extend_schema,
 )
 from rest_framework import permissions, status, views
 from rest_framework.response import Response
 
+from apps.notifications.models import Device
 from apps.notifications.serializers import (
+    DeviceSerializer,
     NotificationMarkReadSerializer,
     NotificationSerializer,
     UnreadCountSerializer,
@@ -151,9 +152,6 @@ class NotificationDeleteView(views.APIView):
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
-from apps.notifications.serializers import DeviceSerializer
-from apps.notifications.models import Device
 
 class DeviceRegisterView(views.APIView):
     """POST /api/v1/notifications/devices/ - Register or update a user device for push notifications"""

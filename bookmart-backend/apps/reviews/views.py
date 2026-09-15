@@ -8,7 +8,6 @@ from rest_framework import permissions, status, views
 from rest_framework.response import Response
 
 from apps.authentication.models import User
-from apps.marketplace.models import BookListing
 from apps.marketplace.pagination import NearbyListingPagination
 from apps.reviews.models import Review
 from apps.reviews.serializers import (

@@ -1,5 +1,4 @@
-from django.db import transaction
-from django.db.models import Count, Exists, OuterRef, Value, BooleanField
+from django.db.models import Count, Value
 
 from apps.authentication.models import User
 from apps.marketplace.models import BookListing, Wishlist

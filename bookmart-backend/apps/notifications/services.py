@@ -1,39 +1,10 @@
-from django.db.models import Count
-import requests
-import threading
 import logging
 
 from apps.authentication.models import User
 from apps.notifications.models import Notification
+from apps.notifications.tasks import send_expo_push_notifications_task
 
 logger = logging.getLogger(__name__)
-
-
-def _send_expo_push_notifications_async(expo_tokens: list[str], title: str, body: str, extra_data: dict = None):
-    payload = []
-    for token in expo_tokens:
-        payload.append({
-            "to": token,
-            "sound": "default",
-            "title": title,
-            "body": body,
-            "data": extra_data or {}
-        })
-    try:
-        response = requests.post(
-            "https://exp.host/--/api/v2/push/send",
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "Accept-encoding": "gzip, deflate"
-            },
-            timeout=10
-        )
-        if response.status_code != 200:
-            logger.error(f"Failed to send push notifications: {response.text}")
-    except Exception as e:
-        logger.error(f"Failed to send push notifications: {str(e)}", exc_info=True)
 
 
 def create_notification(
@@ -62,13 +33,9 @@ def create_notification(
                 "reference_id": reference_id,
                 "reference_type": reference_type,
             }
-            threading.Thread(
-                target=_send_expo_push_notifications_async,
-                args=(tokens, title, body, extra_data),
-                daemon=True
-            ).start()
+            send_expo_push_notifications_task.delay(tokens, title, body, extra_data)
     except Exception as e:
-        logger.error(f"Failed to launch push notification thread: {str(e)}")
+        logger.error(f"Failed to enqueue push notification task: {str(e)}", exc_info=True)
 
     return notif
 
@@ -157,7 +124,7 @@ def notify_report_resolved(report) -> Notification | None:
     return create_notification(
         user=report.reporter,
         title="Report Resolved",
-        body=f"Your report has been reviewed and resolved.",
+        body="Your report has been reviewed and resolved.",
         notification_type=Notification.NotificationType.REPORT_UPDATED,
         reference_id=report.id,
         reference_type="PlatformReport",

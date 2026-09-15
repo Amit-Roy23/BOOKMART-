@@ -1,11 +1,8 @@
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Exists, OuterRef, Q, Subquery, Value, BooleanField, IntegerField
-from django.db.models.functions import Coalesce
+from django.db.models import Count, Exists, OuterRef, Value, BooleanField
 
 from apps.books.models import Book, Genre
-from apps.books.serializers import GenreListSerializer
-from apps.marketplace.models import BookListing, BookListingImage, Wishlist
+from apps.marketplace.models import BookListing, Wishlist
 from apps.marketplace.services import get_bounding_box, haversine_distance_sql
 from apps.requirements.models import BookRequirement
 

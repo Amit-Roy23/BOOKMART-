@@ -1,11 +1,8 @@
-import math
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import FloatField, Q
-from django.db.models.expressions import RawSQL
+from django.db.models import Q
 
-from apps.books.models import Book
 from apps.marketplace.models import BookListing
 from apps.marketplace.services import (
     get_bounding_box,

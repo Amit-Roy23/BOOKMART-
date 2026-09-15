@@ -5,6 +5,13 @@ from rest_framework_simplejwt import exceptions, tokens
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
 from apps.authentication import serializers, services
+from apps.authentication.models import User
+from apps.core.throttles import (
+    LoginRateThrottle,
+    OTPSendRateThrottle,
+    PasswordResetRateThrottle,
+    RegisterRateThrottle,
+)
 
 
 def get_tokens_for_user(user):
@@ -19,6 +26,7 @@ def get_tokens_for_user(user):
 class RegisterView(views.APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [RegisterRateThrottle]
     serializer_class = serializers.UserRegisterSerializer
 
     @extend_schema(
@@ -48,6 +56,7 @@ class RegisterView(views.APIView):
 class LoginView(views.APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginRateThrottle]
     serializer_class = serializers.UserLoginSerializer
 
     @extend_schema(
@@ -127,11 +136,10 @@ class RefreshTokenView(views.APIView):
         )
 
 
-from apps.authentication.models import User
-
 class ForgotPasswordView(views.APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [PasswordResetRateThrottle, OTPSendRateThrottle]
     serializer_class = serializers.ForgotPasswordSerializer
 
     @extend_schema(
@@ -159,6 +167,7 @@ class ForgotPasswordView(views.APIView):
 class SocialLoginView(views.APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginRateThrottle]
     serializer_class = serializers.SocialLoginSerializer
 
     @extend_schema(
