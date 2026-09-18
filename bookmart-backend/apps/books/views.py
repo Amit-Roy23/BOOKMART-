@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
@@ -6,6 +8,7 @@ from rest_framework import filters, mixins, permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.books.exceptions import OpenLibraryImportError
 from apps.books.models import Book, Genre, Review, Author
 from apps.books.serializers import (
     BookCreatedResponseSerializer,
@@ -25,6 +28,8 @@ from apps.books.services import (
     search_books,
 )
 from apps.marketplace.models import BookListing
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema_view(
@@ -112,7 +117,26 @@ class BookImportAPIView(APIView):
         ol_key = serializer.validated_data["openlibrary_key"]
         genre_val = serializer.validated_data.get("genre")
 
-        book, created = import_book_from_openlibrary(ol_key, custom_category=genre_val)
+        try:
+            book, created = import_book_from_openlibrary(
+                ol_key, custom_category=genre_val
+            )
+        except OpenLibraryImportError as exc:
+            return Response(
+                {"detail": exc.message},
+                status=exc.status_code,
+            )
+        except Exception as exc:
+            logger.error(
+                f"Unexpected error during OpenLibrary import for key '{ol_key}': {exc}",
+                exc_info=True,
+            )
+            return Response(
+                {
+                    "detail": "An unexpected error occurred while importing the book. Please try again."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response(
             {

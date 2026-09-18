@@ -125,6 +125,105 @@ class BookImportCategorizationTests(APITestCase):
         self.assertIn("Software Engineering Custom", response.data["genres"])
         self.assertIn("Software", response.data["genres"])
 
+    @patch("apps.books.services.get_book_document")
+    @patch("apps.books.services.get_author_document")
+    def test_import_book_concurrent_multiple_authors(
+        self, mock_get_author_document, mock_get_book_document
+    ):
+        """Verify multiple authors are fetched concurrently and linked to the book."""
+        mock_get_book_document.return_value = {
+            "title": "Design Patterns",
+            "authors": [
+                {"author": {"key": "/authors/OL1A"}},
+                {"author": {"key": "/authors/OL2A"}},
+                {"author": {"key": "/authors/OL3A"}},
+                {"author": {"key": "/authors/OL4A"}},
+            ],
+            "first_publish_date": "1994",
+        }
+
+        def side_effect(key):
+            mapping = {
+                "/authors/OL1A": {"name": "Erich Gamma"},
+                "/authors/OL2A": {"name": "Richard Helm"},
+                "/authors/OL3A": {"name": "Ralph Johnson"},
+                "/authors/OL4A": {"name": "John Vlissides"},
+            }
+            return mapping.get(key, {"name": "Unknown"})
+
+        mock_get_author_document.side_effect = side_effect
+
+        book, created = import_book_from_openlibrary("/works/OL123W")
+        self.assertTrue(created)
+        self.assertEqual(book.title, "Design Patterns")
+        self.assertEqual(book.authors.count(), 4)
+        author_names = list(book.authors.values_list("name", flat=True))
+        self.assertIn("Erich Gamma", author_names)
+        self.assertIn("Richard Helm", author_names)
+        self.assertIn("Ralph Johnson", author_names)
+        self.assertIn("John Vlissides", author_names)
+
+    @patch("apps.books.services.get_book_document")
+    @patch("apps.books.services.get_author_document")
+    def test_import_book_author_not_found_fallback(
+        self, mock_get_author_document, mock_get_book_document
+    ):
+        """Verify that when an author returns 404, it gracefully falls back to 'Unknown'."""
+        from apps.books.exceptions import OpenLibraryNotFoundError
+
+        mock_get_book_document.return_value = {
+            "title": "Ancient Manuscript",
+            "authors": [{"author": {"key": "/authors/OL9999A"}}],
+        }
+        mock_get_author_document.side_effect = OpenLibraryNotFoundError("Author not found")
+
+        book, created = import_book_from_openlibrary("/works/OL9999W")
+        self.assertTrue(created)
+        self.assertEqual(book.authors.count(), 1)
+        self.assertEqual(book.authors.first().name, "Unknown")
+
+    @patch("apps.books.services.requests.get")
+    def test_import_book_endpoint_timeout_returns_504(self, mock_requests_get):
+        """Verify that OpenLibrary timeout returns HTTP 504 with a clear detail message."""
+        import requests
+        self.client.force_authenticate(user=self.user)
+        mock_requests_get.side_effect = requests.exceptions.Timeout("Connection timed out")
+
+        url = "/api/v1/book/import-openlibrary/"
+        response = self.client.post(url, {"openlibrary_key": "/works/OLTimeoutW"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_504_GATEWAY_TIMEOUT)
+        self.assertIn("timed out", response.data["detail"].lower())
+
+    @patch("apps.books.services.requests.get")
+    def test_import_book_endpoint_connection_error_returns_503(self, mock_requests_get):
+        """Verify that OpenLibrary connection error returns HTTP 503 with a clear detail message."""
+        import requests
+        self.client.force_authenticate(user=self.user)
+        mock_requests_get.side_effect = requests.exceptions.ConnectionError("Failed to establish connection")
+
+        url = "/api/v1/book/import-openlibrary/"
+        response = self.client.post(url, {"openlibrary_key": "/works/OLConnW"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn("connect", response.data["detail"].lower())
+
+    @patch("apps.books.services.requests.get")
+    def test_import_book_endpoint_not_found_returns_404(self, mock_requests_get):
+        """Verify that OpenLibrary 404 returns HTTP 404 with a clear detail message."""
+        import requests
+        from unittest.mock import MagicMock
+        self.client.force_authenticate(user=self.user)
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_requests_get.side_effect = requests.exceptions.HTTPError(response=mock_response)
+
+        url = "/api/v1/book/import-openlibrary/"
+        response = self.client.post(url, {"openlibrary_key": "/works/OLNotFoundW"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("not found", response.data["detail"].lower())
+
     def test_manual_book_create_endpoint(self):
         """Verify manually inserting a book record when search does not find the book."""
         self.client.force_authenticate(user=self.user)

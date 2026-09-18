@@ -1,15 +1,31 @@
+import concurrent.futures
 from datetime import date
+import logging
 import re
 
 import requests
 from django.db import transaction
 from django.db.models import Q
 
+from apps.books.exceptions import (
+    OpenLibraryConnectionError,
+    OpenLibraryHTTPError,
+    OpenLibraryImportError,
+    OpenLibraryNotFoundError,
+    OpenLibraryTimeoutError,
+)
 from apps.books.models import Author, Book, Genre
 from apps.tags.services import tag_item
 
+logger = logging.getLogger(__name__)
+
 OPENLIBRARY_WORK_URL = "https://openlibrary.org"
 OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
+OPENLIBRARY_TIMEOUT_SECONDS = 5
+OPENLIBRARY_HEADERS = {
+    "User-Agent": "Bookmart/1.0 (https://bookmart.app; dev@bookmart.app)",
+    "Accept": "application/json",
+}
 
 
 def parse_description(description):
@@ -64,7 +80,136 @@ def process_genre_input(genre_input):
     return genres
 
 
-@transaction.atomic
+def get_book_document(work_key: str):
+    clean_key = str(work_key).strip()
+    if not clean_key.startswith("/"):
+        clean_key = f"/{clean_key}"
+    if clean_key.endswith(".json"):
+        clean_key = clean_key[:-5]
+
+    url = f"{OPENLIBRARY_WORK_URL}{clean_key}.json"
+
+    try:
+        response = requests.get(
+            url,
+            headers=OPENLIBRARY_HEADERS,
+            timeout=OPENLIBRARY_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout as exc:
+        logger.error(
+            f"OpenLibrary request timed out fetching book document for '{work_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryTimeoutError(
+            f"OpenLibrary request timed out while fetching book details: {work_key}"
+        ) from exc
+    except requests.exceptions.ConnectionError as exc:
+        logger.error(
+            f"OpenLibrary connection failed fetching book document for '{work_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryConnectionError(
+            f"Failed to connect to OpenLibrary service for book: {work_key}"
+        ) from exc
+    except requests.exceptions.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else 500
+        logger.error(
+            f"OpenLibrary HTTP {status_code} error fetching book document for '{work_key}': {exc}",
+            exc_info=True,
+        )
+        if status_code == 404:
+            raise OpenLibraryNotFoundError(
+                f"Book not found on OpenLibrary: {work_key}"
+            ) from exc
+        raise OpenLibraryHTTPError(
+            f"OpenLibrary returned HTTP error {status_code} for book: {work_key}",
+            status_code=status_code,
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        logger.error(
+            f"OpenLibrary request exception for '{work_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryImportError(
+            f"Failed to fetch book from OpenLibrary: {str(exc)}"
+        ) from exc
+    except ValueError as exc:
+        logger.error(
+            f"Invalid JSON returned from OpenLibrary for '{work_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryImportError(
+            f"Invalid response format returned from OpenLibrary for book: {work_key}"
+        ) from exc
+
+
+def get_author_document(author_key: str):
+    clean_key = str(author_key).strip()
+    if not clean_key.startswith("/"):
+        clean_key = f"/{clean_key}"
+    if clean_key.endswith(".json"):
+        clean_key = clean_key[:-5]
+
+    url = f"{OPENLIBRARY_WORK_URL}{clean_key}.json"
+
+    try:
+        response = requests.get(
+            url,
+            headers=OPENLIBRARY_HEADERS,
+            timeout=OPENLIBRARY_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout as exc:
+        logger.error(
+            f"OpenLibrary request timed out fetching author document for '{author_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryTimeoutError(
+            f"OpenLibrary request timed out while fetching author details: {author_key}"
+        ) from exc
+    except requests.exceptions.ConnectionError as exc:
+        logger.error(
+            f"OpenLibrary connection failed fetching author document for '{author_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryConnectionError(
+            f"Failed to connect to OpenLibrary service for author: {author_key}"
+        ) from exc
+    except requests.exceptions.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else 500
+        logger.error(
+            f"OpenLibrary HTTP {status_code} error fetching author document for '{author_key}': {exc}",
+            exc_info=True,
+        )
+        if status_code == 404:
+            raise OpenLibraryNotFoundError(
+                f"Author not found on OpenLibrary: {author_key}"
+            ) from exc
+        raise OpenLibraryHTTPError(
+            f"OpenLibrary returned HTTP error {status_code} for author: {author_key}",
+            status_code=status_code,
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        logger.error(
+            f"OpenLibrary request exception for author '{author_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryImportError(
+            f"Failed to fetch author from OpenLibrary: {str(exc)}"
+        ) from exc
+    except ValueError as exc:
+        logger.error(
+            f"Invalid JSON returned from OpenLibrary for author '{author_key}': {exc}",
+            exc_info=True,
+        )
+        raise OpenLibraryImportError(
+            f"Invalid response format returned from OpenLibrary for author: {author_key}"
+        ) from exc
+
+
 def import_book_from_openlibrary(work_key, custom_category=None):
     # Check if book already exists in local database
     existing_book = Book.objects.filter(openlibrary_key=work_key).first()
@@ -83,59 +228,93 @@ def import_book_from_openlibrary(work_key, custom_category=None):
     if covers:
         cover_url = f"https://covers.openlibrary.org/b/id/{covers[0]}-L.jpg"
 
-    author_objects = []
-
+    # Concurrently fetch author documents to eliminate sequential N+1 HTTP calls
+    author_keys = []
     for author_data in document.get("authors", []):
         author_key = author_data.get("author", {}).get("key")
+        if author_key and author_key not in author_keys:
+            author_keys.append(author_key)
 
-        if not author_key:
-            continue
+    author_names = {}
+    if author_keys:
+        max_workers = min(len(author_keys), 5)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_key = {
+                executor.submit(get_author_document, key): key
+                for key in author_keys
+            }
+            for future in concurrent.futures.as_completed(future_to_key):
+                key = future_to_key[future]
+                try:
+                    author_doc = future.result()
+                    name = (
+                        author_doc.get("name", "Unknown")
+                        if isinstance(author_doc, dict)
+                        else "Unknown"
+                    )
+                    author_names[key] = name
+                except OpenLibraryNotFoundError:
+                    logger.warning(
+                        f"Author document not found on OpenLibrary for '{key}'. Defaulting name to 'Unknown'.",
+                        exc_info=True,
+                    )
+                    author_names[key] = "Unknown"
+                except OpenLibraryImportError:
+                    # Propagate timeout, network, or server errors from author requests
+                    raise
+                except Exception as exc:
+                    logger.error(
+                        f"Unexpected error fetching author for key '{key}': {exc}",
+                        exc_info=True,
+                    )
+                    author_names[key] = "Unknown"
 
-        # Fetch author details
-        author_document = get_author_document(author_key)
-        author_name = author_document.get("name", "Unknown")
+    author_objects = []
+    for key in author_keys:
+        author_name = author_names.get(key, "Unknown")
         author, _ = Author.objects.get_or_create(name=author_name)
         author_objects.append(author)
 
     first_publish_date_str = document.get("first_publish_date")
     published_date = parse_first_publish_date(first_publish_date_str)
 
-    book, created = Book.objects.update_or_create(
-        openlibrary_key=work_key,
-        defaults={
-            "title": title,
-            "cover_url": cover_url or "",
-            "published_date": published_date,
-        },
-    )
+    with transaction.atomic():
+        book, created = Book.objects.update_or_create(
+            openlibrary_key=work_key,
+            defaults={
+                "title": title,
+                "cover_url": cover_url or "",
+                "published_date": published_date,
+            },
+        )
 
-    # ManyToMany assignment
-    book.authors.set(author_objects)
+        # ManyToMany assignment
+        book.authors.set(author_objects)
 
-    # Parse and assign genres from subjects (limit to top 10)
-    genre_objects = []
-    subjects = document.get("subjects", [])
-    for subject in subjects[:10]:
-        subject_name = subject.strip()
-        if len(subject_name) > 100:
-            subject_name = subject_name[:100]
-        if not subject_name:
-            continue
-        genre, _ = Genre.objects.get_or_create(name=subject_name)
-        genre_objects.append(genre)
+        # Parse and assign genres from subjects (limit to top 10)
+        genre_objects = []
+        subjects = document.get("subjects", [])
+        for subject in subjects[:10]:
+            subject_name = subject.strip()
+            if len(subject_name) > 100:
+                subject_name = subject_name[:100]
+            if not subject_name:
+                continue
+            genre, _ = Genre.objects.get_or_create(name=subject_name)
+            genre_objects.append(genre)
 
-    # Handle manual custom genre input
-    if custom_category:
-        manual_genres = process_genre_input(custom_category)
-        for gen in manual_genres:
-            if gen not in genre_objects:
-                genre_objects.append(gen)
+        # Handle manual custom genre input
+        if custom_category:
+            manual_genres = process_genre_input(custom_category)
+            for gen in manual_genres:
+                if gen not in genre_objects:
+                    genre_objects.append(gen)
 
-    book.genres.set(genre_objects)
+        book.genres.set(genre_objects)
 
-    # Tag the book with OpenLibrary subjects as tags
-    if subjects:
-        tag_item(book, subjects)
+        # Tag the book with OpenLibrary subjects as tags
+        if subjects:
+            tag_item(book, subjects)
 
     return book, created
 
@@ -189,25 +368,6 @@ def create_manual_book(data):
     return book
 
 
-def get_book_document(work_key: str):
-    url = f"{OPENLIBRARY_WORK_URL}{work_key}.json"
-    response = requests.get(
-        url,
-        timeout=5,
-    )
-    response.raise_for_status()
-
-    return response.json()
-
-
-def get_author_document(author_key):
-    url = f"https://openlibrary.org/{author_key}.json"
-    response = requests.get(url, timeout=5)
-    response.raise_for_status()
-
-    return response.json()
-
-
 def search_books(query: str, limit: int = 10):
     query_str = query.strip()
     results = []
@@ -254,7 +414,8 @@ def search_books(query: str, limit: int = 10):
         response = requests.get(
             OPENLIBRARY_SEARCH_URL,
             params=params,
-            timeout=5,
+            headers=OPENLIBRARY_HEADERS,
+            timeout=OPENLIBRARY_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         data = response.json()
@@ -286,7 +447,10 @@ def search_books(query: str, limit: int = 10):
                     "is_local": False,
                 }
             )
-    except requests.RequestException:
-        pass
+    except requests.RequestException as exc:
+        logger.warning(
+            f"OpenLibrary search request failed for query '{query_str}': {exc}",
+            exc_info=True,
+        )
 
     return results[:limit]
