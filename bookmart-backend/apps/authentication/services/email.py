@@ -21,11 +21,17 @@ class EmailNotificationService:
     @staticmethod
     def _send_email_async(email: str, template_name: str, context: dict):
         try:
+            from_email = (
+                getattr(settings, "DEFAULT_FROM_EMAIL", None)
+                or getattr(settings, "EMAIL_HOST_USER", None)
+            )
             msg = BaseEmailMessage(
                 template_name=template_name,
                 context=context,
+                from_email=from_email or None,
             )
             msg.send([email])
+            logger.info(f"Successfully sent transactional email to {email}")
         except Exception as e:
             logger.error(
                 f"Failed to dispatch transactional mail to {email}. Error: {str(e)}",
@@ -37,16 +43,21 @@ class EmailNotificationService:
         """
         Dispatches a transactional HTML email containing the security verification OTP
         in a background thread to prevent HTTP request blocking.
+        Always prints the OTP directly to the terminal / server logs for instant access.
         """
+        print(
+            f"\n{'=' * 50}\n"
+            f"[BOOKMART OTP DISPATCH]\n"
+            f"Purpose : {purpose}\n"
+            f"User    : {getattr(user, 'full_name', '')} ({user.email})\n"
+            f"OTP Code: >>> {otp_code} <<<\n"
+            f"Expires : 15 minutes\n"
+            f"{'=' * 50}\n",
+            flush=True,
+        )
+
         if not _is_smtp_configured():
-            print(
-                f"\n{'=' * 50}\n"
-                f"BOOKMART DEVELOPMENT OTP\n"
-                f"Email : {user.email}\n"
-                f"OTP   : {otp_code}\n"
-                f"Expires: 10 minutes\n"
-                f"{'=' * 50}\n"
-            )
+            logger.info("SMTP not configured. OTP printed to terminal.")
             return True
 
         subject = (
@@ -56,7 +67,7 @@ class EmailNotificationService:
         )
 
         context = {
-            "full_name": user.full_name,
+            "full_name": getattr(user, "full_name", "") or user.email,
             "otp_code": otp_code,
             "subject": subject,
         }

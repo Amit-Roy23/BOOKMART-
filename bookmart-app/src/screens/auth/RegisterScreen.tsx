@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { api } from "@/api/clients";
+import { ENDPOINTS } from "@/api/endpoints";
 
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -118,7 +119,7 @@ const RegisterScreen: React.FC = () => {
 
   const socialLoginMutation = useMutation({
     mutationFn: async (payload: { provider: string; provider_id: string; email: string; full_name?: string }) => {
-      const response = await api.post("/api/v1/auth/social-login/", payload);
+      const response = await api.post(ENDPOINTS.AUTH.SOCIAL_LOGIN, payload);
       return response.data;
     },
     onSuccess: async (data) => {
@@ -136,7 +137,7 @@ const RegisterScreen: React.FC = () => {
       try {
         const pushToken = await SecureStore.getItemAsync("pushToken");
         if (pushToken && accessToken) {
-          await api.post("/api/v1/notifications/devices/", { expo_push_token: pushToken });
+          await api.post(ENDPOINTS.NOTIFICATIONS.DEVICES, { expo_push_token: pushToken });
         }
       } catch (err) {
         console.error("Failed to register push token during social login:", err);

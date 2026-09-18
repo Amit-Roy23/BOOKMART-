@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/api/clients";
+import { ENDPOINTS } from "@/api/endpoints";
 import {
   ActivityIndicator,
   Alert,
@@ -135,7 +136,7 @@ const VerifyEmail = () => {
       try {
         const pushToken = await SecureStore.getItemAsync("pushToken");
         if (pushToken && accessToken) {
-          await api.post("/api/v1/notifications/devices/", { expo_push_token: pushToken });
+          await api.post(ENDPOINTS.NOTIFICATIONS.DEVICES, { expo_push_token: pushToken });
         }
       } catch (err) {
         console.error("Failed to register push token during verification:", err);

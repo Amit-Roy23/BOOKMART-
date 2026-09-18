@@ -20,6 +20,7 @@ import { useMutation } from "@tanstack/react-query";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "@/api/clients";
+import { ENDPOINTS } from "@/api/endpoints";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -53,7 +54,7 @@ const ForgotPassScreen: React.FC = () => {
   // Step 1: Forgot Password Request Mutation
   const forgotPasswordMutation = useMutation({
     mutationFn: async (emailVal: string) => {
-      const response = await api.post("/api/v1/auth/forgot-password/", { email: emailVal });
+      const response = await api.post(ENDPOINTS.AUTH.FORGOT_PASSWORD, { email: emailVal });
       return response.data;
     },
     onSuccess: () => {
@@ -69,7 +70,7 @@ const ForgotPassScreen: React.FC = () => {
   // Step 2: Verify Reset OTP and Set Password Mutation
   const resetPasswordMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const response = await api.post("/api/v1/otp/verify-reset-otp/", payload);
+      const response = await api.post(ENDPOINTS.AUTH.VERIFY_RESET_OTP, payload);
       return response.data;
     },
     onSuccess: async (data) => {
@@ -89,7 +90,7 @@ const ForgotPassScreen: React.FC = () => {
       try {
         const pushToken = await SecureStore.getItemAsync("pushToken");
         if (pushToken && accessToken) {
-          await api.post("/api/v1/notifications/devices/", { expo_push_token: pushToken });
+          await api.post(ENDPOINTS.NOTIFICATIONS.DEVICES, { expo_push_token: pushToken });
         }
       } catch (err) {
         console.error("Failed to register push token during reset callback:", err);

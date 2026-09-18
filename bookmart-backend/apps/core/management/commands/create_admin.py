@@ -26,7 +26,7 @@ class Command(BaseCommand):
 
         if not lookup_value or not password:
             self.stdout.write(
-                self.style.WARNING(
+                self.style.NOTICE(
                     "Superuser credentials not fully provided in environment variables (DJANGO_SUPERUSER_USERNAME/EMAIL, DJANGO_SUPERUSER_PASSWORD). Skipping."
                 )
             )
@@ -73,5 +73,5 @@ class Command(BaseCommand):
 
             self.stdout.write(self.style.SUCCESS("Superuser created"))
         except Exception as e:
-            self.stderr.write(self.style.ERROR(f"Error creating superuser: {e}"))
+            self.stderr.write(f"Error creating superuser: {e}")
             raise

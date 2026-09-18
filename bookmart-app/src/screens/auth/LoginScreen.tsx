@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { api } from "@/api/clients";
+import { ENDPOINTS } from "@/api/endpoints";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -108,7 +109,7 @@ const LoginScreen: React.FC = () => {
       try {
         const pushToken = await SecureStore.getItemAsync("pushToken");
         if (pushToken && accessToken) {
-          await api.post("/api/v1/notifications/devices/", { expo_push_token: pushToken });
+          await api.post(ENDPOINTS.NOTIFICATIONS.DEVICES, { expo_push_token: pushToken });
         }
       } catch (err) {
         console.error("Failed to register push token during login callback:", err);
@@ -141,7 +142,7 @@ const LoginScreen: React.FC = () => {
 
   const socialLoginMutation = useMutation({
     mutationFn: async (payload: { provider: string; provider_id: string; email: string; full_name?: string }) => {
-      const response = await api.post("/api/v1/auth/social-login/", payload);
+      const response = await api.post(ENDPOINTS.AUTH.SOCIAL_LOGIN, payload);
       return response.data;
     },
     onSuccess: async (data) => {
@@ -159,7 +160,7 @@ const LoginScreen: React.FC = () => {
       try {
         const pushToken = await SecureStore.getItemAsync("pushToken");
         if (pushToken && accessToken) {
-          await api.post("/api/v1/notifications/devices/", { expo_push_token: pushToken });
+          await api.post(ENDPOINTS.NOTIFICATIONS.DEVICES, { expo_push_token: pushToken });
         }
       } catch (err) {
         console.error("Failed to register push token during social login:", err);
