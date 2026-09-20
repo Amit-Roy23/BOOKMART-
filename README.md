@@ -112,22 +112,34 @@ docker compose down
 
 ## 📱 Mobile App Setup (Expo Go on Physical Phone)
 
-The mobile app runs directly on your machine and connects to the Dockerized backend over your Wi-Fi network.
+The mobile app connects to your local Django backend over your local Wi-Fi network.
 
 ### 1. Why `localhost` will NOT work on your phone
-When your phone makes a network request to `http://localhost:8000`, it refers to **the phone itself** (loopback interface), not your computer. Your phone and computer must be connected to the **same Wi-Fi network**, and the mobile app must point to your computer's LAN IP (e.g. `http://192.168.1.102:8000/api/v1`).
+When your phone makes a network request to `http://localhost:8000`, it refers to **the phone itself** (loopback interface), not your computer. Your phone and computer must be connected to the **same Wi-Fi network**, and the mobile app must point to your computer's LAN IP (e.g. `http://192.168.1.106:8000/api/v1`).
 
-### 2. Configure Mobile `.env`
-In `bookmart-app/.env`:
+### 2. Configure Mobile `.env.development`
+In `bookmart-app/.env.development`:
 ```env
-API_URL=http://192.168.1.102:8000/api/v1
+EXPO_PUBLIC_API_URL=http://192.168.1.106:8000/api/v1
 ```
+*(Replace with your computer's actual IPv4 address from `ipconfig`)*
 
-### 3. Start Expo Bundler
+### 3. Start Local Dev Servers (2 Terminals)
+
+**Terminal 1 (Backend):**
+```bash
+cd bookmart-backend
+uv run python manage.py runserver 0.0.0.0:8000
+```
+*(Or `.\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000`)*
+
+**Terminal 2 (Mobile App):**
 ```bash
 cd bookmart-app
-npx expo start
+npx expo start -c
 ```
+> [!NOTE]
+> Run standard `npx expo start` (do **not** use `--tunnel`). Ensure your phone and computer are on the same Wi-Fi.
 
 ### 4. Open in Expo Go
 - **Android**: Scan the QR code using the **Expo Go** app.

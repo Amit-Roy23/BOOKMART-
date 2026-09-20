@@ -30,7 +30,7 @@ export interface AuthorItem {
 
 // ── Sample data ───────────────────────────────────────────────────────────────
 
-const DEFAULT_AUTHORS: AuthorItem[] = [
+export const DEFAULT_AUTHORS: AuthorItem[] = [
   {
     id: "1",
     name: "Rabindranath Thakur",
@@ -283,7 +283,11 @@ export interface AuthorsSectionProps {
 }
 
 const AuthorsSection: React.FC<AuthorsSectionProps> = memo(
-  ({ authors = DEFAULT_AUTHORS, onAuthorPress, onSeeAllPress }) => {
+  ({ authors, onAuthorPress, onSeeAllPress }) => {
+    if (!authors || authors.length === 0) {
+      return null;
+    }
+
     const listRef = useRef<any>(null);
     const scrollX = useSharedValue(0);
     const N = authors.length;

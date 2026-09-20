@@ -153,6 +153,11 @@ const AuthorListScreen = () => {
           contentContainerStyle={styles.listContent}
           onRefresh={refetch}
           refreshing={isLoading}
+          ListEmptyComponent={
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center", marginTop: 60 }}>
+              <Text style={{ fontFamily: FONTS.manrope.medium, color: COLORS.textMuted }}>No authors found.</Text>
+            </View>
+          }
         />
       )}
     </View>

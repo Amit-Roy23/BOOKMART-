@@ -6,7 +6,6 @@ import ExcellentCondition from "@/components/smallComp/ExcellentCondition";
 import PeopleViewing from "@/components/smallComp/PeopleViewing";
 import RecentlyAdded from "@/components/smallComp/RecentlyAdded";
 import SponsoredSection from "@/components/smallComp/SponsoredSection";
-import AuthorsSection, { AuthorItem } from "@/components/ui/AuthorsSection";
 import GenreSection from "@/components/ui/GenreSection";
 import HomeHeader from "@/components/ui/HomeHeader";
 import InstituteBooks from "@/components/ui/InstituteBooks";
@@ -51,14 +50,6 @@ const HomeScreen = () => {
     queryKey: ["recommendations"],
     queryFn: async () => {
       const response = await api.get("/api/v1/book/recommendations/");
-      return response.data;
-    },
-  });
-
-  const { data: authorsData } = useQuery({
-    queryKey: ["authors"],
-    queryFn: async () => {
-      const response = await api.get("/api/v1/book/authors/");
       return response.data;
     },
   });
@@ -157,17 +148,6 @@ const HomeScreen = () => {
     };
   }, [recommendationsData]);
 
-  const authors = useMemo(() => {
-    if (!authorsData?.results) return [];
-    return authorsData.results.map((item: any) => ({
-      id: String(item.id),
-      name: item.name,
-      photoUri: item.image_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
-      bio: item.bio || "",
-      rating: parseFloat(item.rating) || 5,
-    }));
-  }, [authorsData]);
-
   const handleNotificationPress = useCallback(() => {
     router.push("/(screens)/Notifications");
   }, []);
@@ -200,17 +180,6 @@ const HomeScreen = () => {
 
   const handleInstituteSeeAllPress = useCallback(() => {
     router.push("/(screens)/CollegeInsights");
-  }, []);
-
-  const handleAuthorPress = useCallback((author: AuthorItem) => {
-    router.push({
-      pathname: "/(screens)/AuthorDetails",
-      params: { author: JSON.stringify(author) },
-    });
-  }, []);
-
-  const handleAuthorSeeAllPress = useCallback(() => {
-    router.push("/(screens)/AuthorList");
   }, []);
 
   if (isLoadingListings) {
@@ -252,11 +221,6 @@ const HomeScreen = () => {
         {/* ── Nearest Books ── */}
         {nearestBooks.length > 0 && (
           <NearestBooks books={nearestBooks} onBookPress={handleBookPress} onSeeAllPress={handleSeeAllPress} />
-        )}
-
-        {/* ── Authors ── */}
-        {authors.length > 0 && (
-          <AuthorsSection authors={authors} onAuthorPress={handleAuthorPress} onSeeAllPress={handleAuthorSeeAllPress} />
         )}
 
         {/* ── Recently Added ── */}
