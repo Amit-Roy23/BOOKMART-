@@ -273,7 +273,7 @@ const CreateScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const editListingId = route.params?.editListingId;
+  const editListingId = route.params?.editListingId || route.params?.listingId || route.params?.id;
 
   // ── State ──
   const [currentStep, setCurrentStep] = useState(1);
@@ -916,7 +916,7 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
-      <Header title={editListingId ? "Edit Listing" : "List a Book"} />
+      <Header title={editListingId ? "Edit Listing" : "List a Book"} backButton={!!editListingId} />
       <StepIndicator currentStep={currentStep} />
 
       <ScrollView
@@ -1448,7 +1448,7 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
         <SuccessOverlay
           onViewListing={() => {
             resetForm();
-            router.push("/(screens)/MyListings" as any);
+            router.push("/(screens)/ManageListings" as any);
           }}
           onGoHome={() => {
             resetForm();

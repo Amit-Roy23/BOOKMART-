@@ -88,8 +88,11 @@ export default function ManageListingsScreen() {
   }, [myListingsList, searchQuery, activeFilter, activeSort]);
 
   const handleListingPress = (item: any) => {
-    // Navigate to listings update edit view
-    router.push("/(screens)/MyListings");
+    // Navigate to listings update edit view with the selected listing's ID
+    router.push({
+      pathname: "/(tabs)/create",
+      params: { editListingId: item.id },
+    } as any);
   };
 
   const getStatusColor = (status: string) => {
