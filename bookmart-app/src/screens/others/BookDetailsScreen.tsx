@@ -611,10 +611,10 @@ const BookDetailsScreen = () => {
             </View>
           </View>
 
-          {/* Genres as chips */}
+          {/* Category as chips */}
           {book.genresList && book.genresList.length > 0 ? (
             <View style={styles.genreSection}>
-              <Text style={styles.sectionTitle}>Genre</Text>
+              <Text style={styles.sectionTitle}>Category</Text>
               <View style={styles.chipsContainer}>
                 {book.genresList.map((g: string, idx: number) => (
                   <View key={idx} style={styles.genreChip}>

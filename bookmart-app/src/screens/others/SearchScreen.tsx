@@ -17,6 +17,7 @@ import { rem } from "@/utils/responsive";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/api/clients";
+import { CATEGORIES } from "@/components/ui/GenreSection";
 
 const RECENT_SEARCHES_KEY = "@recent_searches";
 const MAX_RECENT_SEARCHES = 10;
@@ -389,7 +390,7 @@ const SearchScreen = () => {
             )}
           </View>
 
-          {/* Accordion 3: Genre */}
+          {/* Accordion 3: Category */}
           <View style={styles.accordionContainer}>
             <TouchableOpacity
               style={styles.accordionHeader}
@@ -398,7 +399,7 @@ const SearchScreen = () => {
             >
               <View style={styles.accordionTitleRow}>
                 <Text style={[styles.accordionTitle, selectedGenre !== null && styles.accordionTitleActive]}>
-                  Genre
+                  Category
                 </Text>
                 {selectedGenre !== null && <View style={styles.activeDot} />}
               </View>
@@ -415,17 +416,17 @@ const SearchScreen = () => {
                   onPress={() => setSelectedGenre(null)}
                   style={[styles.filterChip, selectedGenre === null && styles.selectedChip]}
                 >
-                  <Text style={[styles.chipText, selectedGenre === null && styles.selectedChipText]}>All Genres</Text>
+                  <Text style={[styles.chipText, selectedGenre === null && styles.selectedChipText]}>All Categories</Text>
                 </TouchableOpacity>
-                {genres.map((g: any) => {
-                  const isSelected = selectedGenre === g.slug;
+                {CATEGORIES.map((g) => {
+                  const isSelected = selectedGenre === g.id || selectedGenre === g.label.toLowerCase();
                   return (
                     <TouchableOpacity
-                      key={g.slug}
-                      onPress={() => setSelectedGenre(g.slug)}
+                      key={g.id}
+                      onPress={() => setSelectedGenre(g.id)}
                       style={[styles.filterChip, isSelected && styles.selectedChip]}
                     >
-                      <Text style={[styles.chipText, isSelected && styles.selectedChipText]}>{g.name}</Text>
+                      <Text style={[styles.chipText, isSelected && styles.selectedChipText]}>{g.label}</Text>
                     </TouchableOpacity>
                   );
                 })}

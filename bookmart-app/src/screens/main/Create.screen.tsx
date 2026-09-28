@@ -9,16 +9,18 @@ import { rem } from "@/utils/responsive";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { router, useNavigation, useRoute } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -29,6 +31,7 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CATEGORIES } from "@/components/ui/GenreSection";
 
 // ────────────────────────────────────────────────────────────────────
 // Helpers & Constants
@@ -279,10 +282,10 @@ const CreateScreen = () => {
   // Step 1 – Book Info
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [genre, setGenre] = useState("");
-  const [genreInput, setGenreInput] = useState("");
-  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
-  const [showGenreDropdown, setShowGenreDropdown] = useState(false);
+  const [category, setCategory] = useState("");
+  const [categoryInput, setCategoryInput] = useState("");
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [images, setImages] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [uploadProgress, setUploadProgress] = useState<number[]>([0, 0, 0, 0, 0, 0]);
   const [bookId, setBookId] = useState<number | null>(null);
@@ -314,18 +317,16 @@ const CreateScreen = () => {
     },
   });
 
-  // ── Genre fallback list ──
-  const BOOK_GENRES = [
-    "Science Fiction",
-    "Romance",
+  // ── Standard 8 Categories list ──
+  const BOOK_CATEGORIES = [
+    "Fiction",
+    "Academic",
     "Self Help",
     "Biography",
     "Business",
-    "Engineering",
-    "Medical",
-    "Law",
-    "Competitive Exams",
-    "Other",
+    "Literature",
+    "Comics",
+    "Others",
   ];
 
   // ── Edit Mode Hydration ──
@@ -359,7 +360,9 @@ const CreateScreen = () => {
 
       const genreNames = editListingData.book.genres?.map((g: any) => (typeof g === "string" ? g : g.name)) || [];
       if (genreNames.length > 0) {
-        setGenreInput(genreNames[0]);
+        const normCat = normalizeCategory(genreNames[0]);
+        setCategoryInput(normCat);
+        setCategory(normCat);
       }
 
       // Load listing images
@@ -400,24 +403,51 @@ const CreateScreen = () => {
     enabled: showSuggestions && debouncedTitle.trim().length >= 2,
   });
 
-  // ── Genre list from backend ──
-  const { data: backendGenres = [] } = useQuery({
-    queryKey: ["genreList"],
-    queryFn: async () => {
-      const response = await api.get("/api/v1/book/genres/");
-      return (response.data?.results || response.data || []).map((g: any) => g.name);
-    },
-  });
+const normalizeCategory = (catStr: string | null | undefined): string => {
+  if (!catStr) return "Others";
+  const lower = catStr.toLowerCase();
+  const matched = CATEGORIES.find(
+    (c) => c.label.toLowerCase() === lower || c.id.toLowerCase() === lower
+  );
+  if (matched) return matched.label;
+  if (lower.includes("fiction") || lower.includes("fantasy") || lower.includes("novel") || lower.includes("romance") || lower.includes("thriller")) return "Fiction";
+  if (lower.includes("academic") || lower.includes("textbook") || lower.includes("exam") || lower.includes("science") || lower.includes("computer") || lower.includes("engineering") || lower.includes("prog") || lower.includes("java") || lower.includes("tech")) return "Academic";
+  if (lower.includes("self") || lower.includes("motivation") || lower.includes("habit") || lower.includes("wellness")) return "Self Help";
+  if (lower.includes("bio") || lower.includes("memoir")) return "Biography";
+  if (lower.includes("business") || lower.includes("finance") || lower.includes("money") || lower.includes("market") || lower.includes("management")) return "Business";
+  if (lower.includes("literature") || lower.includes("classic") || lower.includes("poetry")) return "Literature";
+  if (lower.includes("comic") || lower.includes("manga") || lower.includes("anime")) return "Comics";
+  return "Others";
+};
 
-  const genreOptions: string[] =
-    backendGenres.length > 0 ? backendGenres : availableGenres.length > 0 ? availableGenres : BOOK_GENRES;
+  const categoryOptions = useMemo(() => {
+    // Strictly the 8 Home screen categories
+    return CATEGORIES.map((c) => ({
+      id: c.id,
+      label: c.label,
+      icon: c.icon,
+      backgroundColor: c.backgroundColor,
+      borderColor: c.borderColor,
+      iconColor: c.iconColor,
+    }));
+  }, []);
+
+  const selectedCategoryObj = useMemo(() => {
+    if (!categoryInput) return null;
+    return (
+      categoryOptions.find(
+        (c) => c.label.toLowerCase() === categoryInput.toLowerCase()
+      ) || categoryOptions[categoryOptions.length - 1]
+    );
+  }, [categoryInput, categoryOptions]);
 
   // ── Import & Manual Create Mutations ──
   const importMutation = useMutation({
-    mutationFn: async ({ openlibraryKey, genreVal }: { openlibraryKey: string; genreVal: string | null }) => {
+    mutationFn: async ({ openlibraryKey, categoryVal }: { openlibraryKey: string; categoryVal: string | null }) => {
       const response = await api.post("/api/v1/book/import-openlibrary/", {
         openlibrary_key: openlibraryKey,
-        genre: genreVal,
+        genre: categoryVal,
+        category: categoryVal,
       });
       return response.data;
     },
@@ -427,8 +457,9 @@ const CreateScreen = () => {
       setBookId(importedBook.book_id || null);
       const responseGenres = importedBook.genres || [];
       if (responseGenres.length > 0) {
-        setAvailableGenres(responseGenres);
-        setGenreInput(responseGenres[0]);
+        const normCat = normalizeCategory(responseGenres[0]);
+        setCategoryInput(normCat);
+        setCategory(normCat);
       }
       setLoadingSuggestionKey(null);
       setShowSuggestions(false);
@@ -454,8 +485,9 @@ const CreateScreen = () => {
       setBookId(manualBook.book_id || null);
       const responseGenres = manualBook.genres || [];
       if (responseGenres.length > 0) {
-        setAvailableGenres(responseGenres);
-        setGenreInput(responseGenres[0]);
+        const normCat = normalizeCategory(responseGenres[0]);
+        setCategoryInput(normCat);
+        setCategory(normCat);
       }
       setLoadingSuggestionKey(null);
       setShowSuggestions(false);
@@ -475,13 +507,14 @@ const CreateScreen = () => {
       setBookId(suggestion.id);
       const responseGenres = suggestion.genres || [];
       if (responseGenres.length > 0) {
-        setAvailableGenres(responseGenres);
-        setGenreInput(responseGenres[0]);
+        const normCat = normalizeCategory(responseGenres[0]);
+        setCategoryInput(normCat);
+        setCategory(normCat);
       }
       showToast("Selected local book record");
     } else {
       setLoadingSuggestionKey(suggestion.openlibrary_key);
-      importMutation.mutate({ openlibraryKey: suggestion.openlibrary_key, genreVal: null });
+      importMutation.mutate({ openlibraryKey: suggestion.openlibrary_key, categoryVal: null });
     }
   };
 
@@ -823,8 +856,8 @@ const CreateScreen = () => {
     setCondition("good");
     setNotes("");
     setPrice("");
-    setGenre("");
-    setGenreInput("");
+    setCategory("");
+    setCategoryInput("");
     setDescription("");
     setImages([null, null, null, null, null, null]);
     setUploadProgress([0, 0, 0, 0, 0, 0]);
@@ -849,7 +882,10 @@ const CreateScreen = () => {
     } else {
       formData.append("title", title);
       formData.append("author", author);
-      if (genreInput) formData.append("genre", genreInput);
+      if (categoryInput) {
+        formData.append("genre", categoryInput);
+        formData.append("category", categoryInput);
+      }
     }
 
     const appendImageFile = (key: string, uri: string) => {
@@ -887,7 +923,7 @@ const CreateScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={!showSuggestions && !showGenreDropdown}
+        scrollEnabled={!showSuggestions}
       >
         {/* ─── Step 1: Book Info ────────────────────────────────────── */}
         {currentStep === 1 && (
@@ -957,7 +993,7 @@ const CreateScreen = () => {
             </View>
 
             {/* Basic Info */}
-            <View style={[styles.sectionCard, (showSuggestions || showGenreDropdown) && { zIndex: 10 }]}>
+            <View style={[styles.sectionCard, showSuggestions && { zIndex: 10 }]}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
                 <Text style={styles.sectionTitle}>Book Details</Text>
@@ -1063,42 +1099,43 @@ const CreateScreen = () => {
                 />
               </View>
 
-              {/* Genre Dropdown */}
-              <View style={[styles.fieldGroup, showGenreDropdown && { zIndex: 10 }]}>
-                <Text style={styles.fieldLabel}>Genre</Text>
+              {/* Category Field Trigger */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Category</Text>
                 <TouchableOpacity
-                  style={styles.dropdownSelector}
-                  activeOpacity={0.8}
-                  onPress={() => setShowGenreDropdown(!showGenreDropdown)}
+                  style={[styles.dropdownSelector, categoryInput ? styles.dropdownSelectorSelected : null]}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowCategoryDropdown(true);
+                  }}
                 >
-                  <Text style={[styles.dropdownText, !genreInput && { color: COLORS.textMuted }]}>
-                    {genreInput || "Select Genre"}
-                  </Text>
-                  <Ionicons
-                    name={showGenreDropdown ? "chevron-up" : "chevron-down"}
-                    size={20}
-                    color={COLORS.textMuted}
-                  />
-                </TouchableOpacity>
-                {showGenreDropdown && (
-                  <View style={styles.suggestionsContainer}>
-                    <ScrollView style={{ maxHeight: rem(10) }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-                      {genreOptions.map((g: string, idx: number) => (
-                        <TouchableOpacity
-                          key={idx}
-                          style={[styles.suggestionItem, genreInput === g && { backgroundColor: COLORS.secondary }]}
-                          onPress={() => {
-                            setGenreInput(g);
-                            setGenre(g);
-                            setShowGenreDropdown(false);
-                          }}
+                  <View style={styles.dropdownValueRow}>
+                    {selectedCategoryObj ? (
+                      <View style={styles.selectedCategoryBadge}>
+                        <View
+                          style={[
+                            styles.categoryBadgeIconWrap,
+                            {
+                              backgroundColor: selectedCategoryObj.backgroundColor,
+                              borderColor: selectedCategoryObj.borderColor,
+                            },
+                          ]}
                         >
-                          <Text style={styles.suggestionTitle}>{g}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                          <Ionicons
+                            name={selectedCategoryObj.icon}
+                            size={15}
+                            color={selectedCategoryObj.iconColor}
+                          />
+                        </View>
+                        <Text style={styles.dropdownTextSelected}>{selectedCategoryObj.label}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.dropdownTextPlaceholder}>Select Category</Text>
+                    )}
                   </View>
-                )}
+                  <Ionicons name="chevron-down" size={20} color={COLORS.textMuted} />
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -1323,6 +1360,89 @@ const CreateScreen = () => {
         )}
       </ScrollView>
 
+      {/* Category Selection Modal Sheet */}
+      <Modal
+        visible={showCategoryDropdown}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCategoryDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryDropdown(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Select Category</Text>
+                <Text style={styles.modalSubtitle}>Choose a category matching your book</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setShowCategoryDropdown(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={20} color={COLORS.black} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {categoryOptions.map((cat) => {
+                const isSelected = categoryInput.toLowerCase() === cat.label.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={cat.id || cat.label}
+                    style={[styles.categoryOptionItem, isSelected && styles.categoryOptionItemSelected]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setCategoryInput(cat.label);
+                      setCategory(cat.label);
+                      setShowCategoryDropdown(false);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.categoryIconWrap,
+                        {
+                          backgroundColor: cat.backgroundColor,
+                          borderColor: cat.borderColor,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={cat.icon} size={20} color={cat.iconColor} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.categoryOptionLabel,
+                        isSelected && styles.categoryOptionLabelSelected,
+                      ]}
+                    >
+                      {cat.label}
+                    </Text>
+                    {isSelected ? (
+                      <View style={styles.selectedCheckCircle}>
+                        <Ionicons name="checkmark" size={14} color={COLORS.white} />
+                      </View>
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color={COLORS.grayHeavvy} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Success Overlay */}
       {showSuccess && (
         <SuccessOverlay
@@ -1457,10 +1577,142 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.md,
   },
+  dropdownSelectorSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: "#F8FAFC",
+  },
+  dropdownValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  selectedCategoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  categoryBadgeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  dropdownTextSelected: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
+  },
+  dropdownTextPlaceholder: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.manrope.regular,
+    color: COLORS.textMuted,
+  },
   dropdownText: {
     fontSize: rem(1),
     fontFamily: FONTS.manrope.medium,
     color: COLORS.black,
+  },
+
+  // Category Modal Sheet
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 12,
+    paddingBottom: 36,
+    maxHeight: "75%",
+  },
+  modalHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.grayHeavvy,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grayLight,
+  },
+  modalTitle: {
+    fontSize: rem(1.125),
+    fontFamily: FONTS.montserrat.bold,
+    color: COLORS.black,
+  },
+  modalSubtitle: {
+    fontSize: rem(0.75),
+    fontFamily: FONTS.manrope.medium,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.grayLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalScroll: {
+    maxHeight: 380,
+  },
+  modalScrollContent: {
+    paddingBottom: 16,
+  },
+  categoryOptionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.04)",
+  },
+  categoryOptionItemSelected: {
+    backgroundColor: "#F0F7FF",
+    borderColor: COLORS.primary,
+  },
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  categoryOptionLabel: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.manrope.semibold,
+    color: COLORS.black,
+    flex: 1,
+  },
+  categoryOptionLabelSelected: {
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.primary,
+  },
+  selectedCheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Suggestions / dropdown overlay

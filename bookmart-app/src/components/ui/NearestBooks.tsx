@@ -133,6 +133,8 @@ const BookCard = memo(
 );
 
 const NearestBooks: React.FC<NearestBooksProps> = memo(({ books, onBookPress, onSeeAllPress }) => {
+  if (!books || books.length === 0) return null;
+
   return (
     <View style={styles.section}>
       {/* Header */}

@@ -55,6 +55,8 @@ const MiniRowCard = memo(
 );
 
 const EndingSoon: React.FC<EndingSoonProps> = memo(({ title = "Ending Soon", books, onBookPress, onSeeAllPress }) => {
+  if (!books || books.length === 0) return null;
+
   const displayBooks = books.slice(0, 4);
 
   return (

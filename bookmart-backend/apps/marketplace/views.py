@@ -96,7 +96,7 @@ class BookListingFilter(django_filters.FilterSet):
     ),
 )
 class BookListingViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     search_fields = ["book__title", "book__authors__name"]

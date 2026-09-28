@@ -15,54 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type NavigationProp = any;
 
-// Dummy data matching the design
-const MY_LISTINGS = [
-  {
-    id: "1",
-    title: "Atomic Habits",
-    author: "James Clear",
-    price: 350,
-    status: "Active",
-    coverUri: "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=400&h=600&fit=crop", // generic book cover
-    views: 152,
-    likes: 22,
-    chats: 8,
-  },
-  {
-    id: "2",
-    title: "The Kite Runner",
-    author: "Khaled Hosseini",
-    price: 230,
-    status: "Active",
-    coverUri: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400&h=600&fit=crop",
-    views: 128,
-    likes: 18,
-    chats: 6,
-  },
-  {
-    id: "3",
-    title: "1984",
-    author: "George Orwell",
-    price: 200,
-    status: "Active",
-    coverUri: "https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=400&h=600&fit=crop",
-    views: 98,
-    likes: 15,
-    chats: 4,
-  },
-  {
-    id: "4",
-    title: "The Alchemist",
-    author: "Paulo Coelho",
-    price: 280,
-    status: "Active",
-    coverUri: "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400&h=600&fit=crop",
-    views: 175,
-    likes: 30,
-    chats: 12,
-  },
-];
-
 import { api } from "@/api/clients";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Alert } from "react-native";
@@ -81,7 +33,7 @@ export default function MyActiveListingsScreen() {
     },
   });
 
-  const sellerId = userProfile?.user?.id;
+  const sellerId = userProfile?.user_id || userProfile?.user?.id || userProfile?.id;
 
   const {
     data: listingsData,
@@ -282,7 +234,26 @@ export default function MyActiveListingsScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={<>{renderSummarySection()}</>}
-          ListFooterComponent={<View style={styles.footerSpacing}>{renderPromoCard()}</View>}
+          ListEmptyComponent={
+            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 40, backgroundColor: COLORS.white, borderRadius: 16, marginVertical: 12, paddingHorizontal: 20 }}>
+              <Ionicons name="book-outline" size={48} color={COLORS.primary} style={{ marginBottom: 12 }} />
+              <Text style={{ fontSize: rem(1), fontFamily: FONTS.manrope.bold, color: COLORS.text, marginBottom: 4 }}>
+                No Listings Found
+              </Text>
+              <Text style={{ fontSize: rem(0.75), fontFamily: FONTS.manrope.regular, color: COLORS.textMuted, textAlign: "center", marginBottom: 16 }}>
+                You haven't listed any books for sale yet.
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
+                onPress={() => router.push("/(tabs)/create")}
+              >
+                <Text style={{ color: COLORS.white, fontFamily: FONTS.manrope.semibold, fontSize: rem(0.75) }}>
+                  + List a Book
+                </Text>
+              </TouchableOpacity>
+            </View>
+          }
+          ListFooterComponent={myListings.length > 0 ? <View style={styles.footerSpacing}>{renderPromoCard()}</View> : null}
           onRefresh={refetch}
           refreshing={isLoading}
         />

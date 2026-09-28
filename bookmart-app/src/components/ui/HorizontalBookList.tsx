@@ -212,6 +212,8 @@ const BookCard: React.FC<BookCardProps> = memo(
 
 const HorizontalBookList: React.FC<HorizontalBookListProps> = memo(
   ({ title, books, animationType = "standard", cardLayout = "standard", onBookPress, onSeeAllPress, loop = false }) => {
+    if (!books || books.length === 0) return null;
+
     const listRef = useRef<Animated.FlatList<any>>(null);
     const scrollX = useSharedValue(0);
 
