@@ -22,16 +22,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useMemo } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useMemo, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const [refreshing, setRefreshing] = useState(false);
 
   // ── Queries ──
-  const { data: userProfile } = useQuery({
+  const { data: userProfile, refetch: refetchProfile } = useQuery({
     queryKey: ["userProfile"],
     queryFn: async () => {
       const response = await api.get("/api/v1/core/profile/me/");
@@ -51,7 +53,7 @@ const HomeScreen = () => {
     },
   });
 
-  const { data: recommendationsData } = useQuery({
+  const { data: recommendationsData, refetch: refetchRecommendations } = useQuery({
     queryKey: ["recommendations"],
     queryFn: async () => {
       const response = await api.get("/api/v1/book/recommendations/");
@@ -59,13 +61,30 @@ const HomeScreen = () => {
     },
   });
 
-  const { data: authorsData } = useQuery({
+  const { data: authorsData, refetch: refetchAuthors } = useQuery({
     queryKey: ["authors"],
     queryFn: async () => {
       const response = await api.get("/api/v1/book/authors/");
       return response.data;
     },
   });
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Promise.all([
+        refetchListings(),
+        refetchProfile(),
+        refetchRecommendations(),
+        refetchAuthors(),
+      ]);
+    } catch (err) {
+      console.log("Error refreshing home feed:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchListings, refetchProfile, refetchRecommendations, refetchAuthors]);
 
   // All active listings available for Home screen feeds
   const allListings = useMemo(() => {
@@ -152,13 +171,50 @@ const HomeScreen = () => {
       .map(mapListingToBook);
   }, [allListings, mapListingToBook]);
 
+  const calculateTimeLeft = useCallback((createdAt?: string): string => {
+    if (!createdAt) return "12d left";
+    const createdTime = new Date(createdAt).getTime();
+    if (isNaN(createdTime)) return "12d left";
+
+    const now = Date.now();
+    const elapsedMs = Math.max(0, now - createdTime);
+    const totalUltimatumMs = 12 * 24 * 60 * 60 * 1000;
+    const remainingMs = totalUltimatumMs - elapsedMs;
+
+    if (remainingMs <= 0) {
+      return "Ending today";
+    }
+
+    const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    if (remainingDays > 1) {
+      return `${remainingDays}d left`;
+    }
+
+    const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+    if (remainingHours > 1) {
+      return `${remainingHours}h left`;
+    }
+
+    return "Ending today";
+  }, []);
+
   const endingSoon = useMemo(() => {
     if (!allListings || allListings.length === 0) return [];
-    return allListings.slice(0, 5).map((item: any) => ({
-      ...mapListingToBook(item),
-      timeLeft: "12h left",
-    }));
-  }, [allListings, mapListingToBook]);
+    return [...allListings]
+      .map((item: any) => {
+        const createdTime = item.created_at ? new Date(item.created_at).getTime() : Date.now();
+        const elapsedMs = Math.max(0, Date.now() - (isNaN(createdTime) ? Date.now() : createdTime));
+        const totalUltimatumMs = 12 * 24 * 60 * 60 * 1000;
+        const remainingMs = totalUltimatumMs - elapsedMs;
+        return {
+          ...mapListingToBook(item),
+          remainingMs,
+          timeLeft: calculateTimeLeft(item.created_at),
+        };
+      })
+      .sort((a, b) => a.remainingMs - b.remainingMs)
+      .slice(0, 6);
+  }, [allListings, mapListingToBook, calculateTimeLeft]);
 
   const editorsChoice = useMemo(() => {
     if (!recommendationsData?.results || recommendationsData.results.length === 0) return null;
@@ -286,6 +342,15 @@ const HomeScreen = () => {
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={true}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+            progressBackgroundColor={COLORS.white}
+          />
+        }
       >
         {/* ── Promo Carousel ── */}
         <PromoBanner onCtaPress={handleCtaPress} />
