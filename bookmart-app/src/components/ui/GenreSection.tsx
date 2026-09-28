@@ -1,6 +1,14 @@
 import { router, useNavigation } from "expo-router";
-import React, { memo, useCallback } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { memo, useCallback, useEffect, useRef } from "react";
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -24,7 +32,7 @@ export const CATEGORIES: GenreItem[] = [
     id: "fiction",
     label: "Fiction",
     screenName: "Fiction",
-    icon: "sparkles",
+    icon: "planet",
     backgroundColor: "#EFF6FF",
     borderColor: "#DBEAFE",
     iconColor: "#2563EB",
@@ -94,8 +102,22 @@ export const CATEGORIES: GenreItem[] = [
   },
 ];
 
+const NUM_SETS = 6;
+const ITEM_WIDTH_WITH_GAP = rem(4.35) + rem(0.625);
+const ONE_SET_WIDTH = CATEGORIES.length * ITEM_WIDTH_WITH_GAP;
+const INITIAL_SCROLL_OFFSET = ONE_SET_WIDTH * 2;
+
+const REPEATED_CATEGORIES = Array.from({ length: NUM_SETS }).flatMap((_, setIndex) =>
+  CATEGORIES.map((item) => ({
+    ...item,
+    uniqueKey: `${item.id}-${setIndex}`,
+  }))
+);
+
 const GenreSection = memo(() => {
   const navigation = useNavigation<any>();
+  const scrollRef = useRef<ScrollView>(null);
+  const isInitializedRef = useRef(false);
 
   const handlePress = useCallback(
     (item: GenreItem) => {
@@ -111,6 +133,47 @@ const GenreSection = memo(() => {
     [navigation]
   );
 
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!isInitializedRef.current) return;
+    const offsetX = event.nativeEvent.contentOffset.x;
+    if (ONE_SET_WIDTH <= 0) return;
+
+    if (offsetX >= ONE_SET_WIDTH * 3.5) {
+      scrollRef.current?.scrollTo({
+        x: offsetX - ONE_SET_WIDTH * 2,
+        animated: false,
+      });
+    } else if (offsetX <= ONE_SET_WIDTH * 0.8) {
+      scrollRef.current?.scrollTo({
+        x: offsetX + ONE_SET_WIDTH * 2,
+        animated: false,
+      });
+    }
+  }, []);
+
+  const handleContentSizeChange = useCallback(() => {
+    if (!isInitializedRef.current) {
+      scrollRef.current?.scrollTo({
+        x: INITIAL_SCROLL_OFFSET,
+        animated: false,
+      });
+      isInitializedRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isInitializedRef.current) {
+        scrollRef.current?.scrollTo({
+          x: INITIAL_SCROLL_OFFSET,
+          animated: false,
+        });
+        isInitializedRef.current = true;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -118,13 +181,19 @@ const GenreSection = memo(() => {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        contentOffset={{ x: INITIAL_SCROLL_OFFSET, y: 0 }}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        onContentSizeChange={handleContentSizeChange}
+        decelerationRate="normal"
       >
-        {CATEGORIES.map((item) => (
+        {REPEATED_CATEGORIES.map((item) => (
           <TouchableOpacity
-            key={item.id}
+            key={item.uniqueKey}
             activeOpacity={0.75}
             style={styles.cardWrapper}
             onPress={() => handlePress(item)}

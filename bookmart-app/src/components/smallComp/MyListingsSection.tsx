@@ -97,7 +97,7 @@ const MyListingsSection: React.FC<MyListingsSectionProps> = memo(
               <View style={styles.addIconWrap}>
                 <Ionicons name="add" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.addCardTitle}>+ List Another</Text>
+              <Text style={styles.addCardTitle}>List Another</Text>
               <Text style={styles.addCardSub}>Add pre-owned book</Text>
             </Pressable>
           )}

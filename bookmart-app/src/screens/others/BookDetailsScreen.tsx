@@ -207,19 +207,32 @@ const BookDetailsScreen = () => {
   const { data: wishlistData, refetch: refetchWishlist } = useQuery({
     queryKey: ["wishlist"],
     queryFn: async () => {
-      const response = await api.get("/api/v1/marketplace/wishlist/");
-      return response.data.results || [];
+      try {
+        const response = await api.get("/api/v1/marketplace/wishlist/");
+        const data = response.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        return [];
+      } catch {
+        return [];
+      }
     },
   });
 
   const isFavorite = useMemo(() => {
-    if (!wishlistData || !listingId) return false;
-    return wishlistData.some((w: any) => String(w.listing.id) === String(listingId));
+    if (!Array.isArray(wishlistData) || !listingId) return false;
+    return wishlistData.some((w: any) => {
+      const lid = w?.listing?.id ?? w?.listing;
+      return String(lid) === String(listingId);
+    });
   }, [wishlistData, listingId]);
 
   const wishlistId = useMemo(() => {
-    if (!wishlistData || !listingId) return null;
-    const found = wishlistData.find((w: any) => String(w.listing.id) === String(listingId));
+    if (!Array.isArray(wishlistData) || !listingId) return null;
+    const found = wishlistData.find((w: any) => {
+      const lid = w?.listing?.id ?? w?.listing;
+      return String(lid) === String(listingId);
+    });
     return found ? found.id : null;
   }, [wishlistData, listingId]);
 

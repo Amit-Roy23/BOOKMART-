@@ -22,21 +22,31 @@ const CollegeBookCard = ({ book }: { book: any }) => {
   const { data: wishlistData } = useQuery({
     queryKey: ["wishlist"],
     queryFn: async () => {
-      const response = await api.get("/api/v1/marketplace/wishlist/");
-      return response.data.results || [];
+      try {
+        const response = await api.get("/api/v1/marketplace/wishlist/");
+        const data = response.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        return [];
+      } catch {
+        return [];
+      }
     },
   });
 
   const wishlistEntry = useMemo(() => {
-    if (!wishlistData) return null;
-    return wishlistData.find((w: any) => String(w.listing.id) === String(book.id));
-  }, [wishlistData, book.id]);
+    if (!Array.isArray(wishlistData)) return null;
+    return wishlistData.find((w: any) => {
+      const listingId = w?.listing?.id ?? w?.listing;
+      return String(listingId) === String(book?.id);
+    });
+  }, [wishlistData, book?.id]);
 
   const isLiked = !!wishlistEntry;
 
   const toggleWishlistMutation = useMutation({
     mutationFn: async () => {
-      if (isLiked && wishlistEntry) {
+      if (isLiked && wishlistEntry?.id) {
         await api.delete(`/api/v1/marketplace/wishlist/${wishlistEntry.id}/`);
       } else {
         await api.post("/api/v1/marketplace/wishlist/", { listing: book.id });

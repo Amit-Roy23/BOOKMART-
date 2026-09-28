@@ -6,10 +6,11 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,12 +22,19 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { api } from "@/api/clients";
 
 const CONDITIONS = ["New", "Like New", "Good", "Acceptable"];
 
+const CONDITION_MAP: Record<string, string> = {
+  New: "NEW",
+  "Like New": "LIKE_NEW",
+  Good: "GOOD",
+  Acceptable: "ACCEPTABLE",
+};
+
 const RequestPostScreen = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
 
   const [bookTitle, setBookTitle] = useState("");
   const [selectedCondition, setSelectedCondition] = useState("New");
@@ -35,18 +43,63 @@ const RequestPostScreen = () => {
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handlePost = () => {
-    setIsLoading(true);
-    if (!bookTitle.trim() || !notes.trim() || !selectedCondition.trim() || !minPrice.trim() || !maxPrice.trim()) {
-      ToastAndroid.show("Please fill in all the fields", ToastAndroid.SHORT);
-      setIsLoading(false);
+  const handlePost = async () => {
+    if (!bookTitle.trim()) {
+      if (Platform.OS === "android") {
+        ToastAndroid.show("Please enter the book title", ToastAndroid.SHORT);
+      } else {
+        Alert.alert("Required", "Please enter the book title");
+      }
       return;
-    } else {
-      ToastAndroid.show("Request posted successfully", ToastAndroid.SHORT);
-      setTimeout(() => {
-        setIsLoading(false);
-        navigation.navigate("Home" as never);
-      }, 1000);
+    }
+
+    const minP = parseFloat(minPrice) || 0;
+    const maxP = parseFloat(maxPrice) || 0;
+
+    if (maxP < minP) {
+      if (Platform.OS === "android") {
+        ToastAndroid.show("Max price must be greater than or equal to min price", ToastAndroid.SHORT);
+      } else {
+        Alert.alert("Invalid Price", "Max price must be greater than or equal to min price");
+      }
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const conditionKey = CONDITION_MAP[selectedCondition] || "GOOD";
+      await api.post("/api/v1/requirements/", {
+        book_title: bookTitle.trim(),
+        preferred_condition: conditionKey,
+        min_price: minP,
+        max_price: maxP,
+        notes: notes.trim() || undefined,
+      });
+
+      if (Platform.OS === "android") {
+        ToastAndroid.show("Requirement posted successfully!", ToastAndroid.SHORT);
+      } else {
+        Alert.alert("Success", "Requirement posted successfully!");
+      }
+
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/(tabs)/home");
+      }
+    } catch (err: any) {
+      console.log("Error posting requirement:", err?.response?.data || err);
+      const errMsg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        "Could not post requirement. Please try again.";
+      if (Platform.OS === "android") {
+        ToastAndroid.show(errMsg, ToastAndroid.SHORT);
+      } else {
+        Alert.alert("Error", errMsg);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
