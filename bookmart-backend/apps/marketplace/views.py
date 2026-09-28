@@ -1,4 +1,7 @@
+from datetime import timedelta
 from django.db.models import Count, Exists, OuterRef, Value, BooleanField
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -11,7 +14,15 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from apps.marketplace.models import BookListing, Wishlist, PlatformNotification, BookContactLedger
+from apps.marketplace.gateways import get_payment_gateway
+from apps.marketplace.models import (
+    BookListing,
+    Wishlist,
+    PlatformNotification,
+    BookContactLedger,
+    BoostPlan,
+    BoostOrder,
+)
 from apps.marketplace.pagination import NearbyListingPagination
 from apps.marketplace.serializers import (
     BookListingCreateSerializer,
@@ -22,6 +33,10 @@ from apps.marketplace.serializers import (
     WishlistCreateSerializer,
     PlatformNotificationSerializer,
     BookContactLedgerSerializer,
+    BoostPlanSerializer,
+    BoostOrderInitiateSerializer,
+    BoostOrderConfirmSerializer,
+    BoostOrderResponseSerializer,
 )
 from apps.marketplace.services import (
     DEFAULT_RADIUS_KM,
@@ -87,6 +102,7 @@ class BookListingViewSet(viewsets.ModelViewSet):
     search_fields = ["book__title", "book__authors__name"]
     filterset_class = BookListingFilter
     ordering_fields = ["price", "created_at"]
+    ordering = ["-created_at"]
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -130,13 +146,66 @@ class BookListingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["post"], url_path="boost")
-    def boost(self, request, pk=None):
+    @extend_schema(
+        summary="Initiate boost payment for listing",
+        description="Creates a PENDING BoostOrder for the specified BoostPlan and calls the active payment gateway to generate a payment session.",
+        request=BoostOrderInitiateSerializer,
+        responses={201: OpenApiTypes.OBJECT},
+        tags=["Boost Listings"],
+    )
+    @action(detail=True, methods=["post"], url_path="boost/initiate", permission_classes=[permissions.IsAuthenticated])
+    def boost_initiate(self, request, pk=None):
         listing = self.get_object()
-        listing.is_boosted = True
-        listing.save(update_fields=["is_boosted"])
-        serializer = BookListingResponseSerializer(listing, context={"request": request})
-        return Response(serializer.data)
+
+        if listing.seller != request.user:
+            return Response(
+                {"detail": "You do not have permission to boost this listing."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check if already currently boosted
+        if listing.is_boosted and (listing.boost_expires_at is None or listing.boost_expires_at > timezone.now()):
+            return Response(
+                {"detail": "This listing is currently already boosted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = BoostOrderInitiateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        plan_id = serializer.validated_data["plan_id"]
+        payment_method = serializer.validated_data.get("payment_method", "UPI")
+
+        plan = BoostPlan.objects.filter(id=plan_id, is_active=True).first()
+        if not plan:
+            return Response(
+                {"detail": "Invalid or inactive boost plan selected."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order = BoostOrder.objects.create(
+            listing=listing,
+            user=request.user,
+            plan=plan,
+            status=BoostOrder.Status.PENDING,
+            payment_method=payment_method,
+            amount=plan.price,
+        )
+
+        gateway = get_payment_gateway()
+        session_data = gateway.initiate_payment(order)
+
+        return Response(
+            {
+                "order_id": order.id,
+                "listing_id": listing.id,
+                "plan": BoostPlanSerializer(plan).data,
+                "amount": str(order.amount),
+                "payment_method": order.payment_method,
+                "payment_session": session_data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -600,4 +669,98 @@ class BookContactLedgerViewSet(
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List active boost plans",
+        description="Retrieve all available and active plans for boosting book listings.",
+        responses={200: BoostPlanSerializer(many=True)},
+        tags=["Boost Listings"],
+    ),
+    retrieve=extend_schema(
+        summary="Retrieve boost plan details",
+        responses={200: BoostPlanSerializer},
+        tags=["Boost Listings"],
+    ),
+)
+class BoostPlanViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    serializer_class = BoostPlanSerializer
+    queryset = BoostPlan.objects.filter(is_active=True)
+    pagination_class = None
+
+
+@extend_schema_view(
+    confirm=extend_schema(
+        summary="Confirm payment and activate boost",
+        description="Verifies payment with the active payment gateway. On success, sets BoostOrder status to SUCCESS, marks the listing as boosted, and sets its boost_expires_at timestamp.",
+        request=BoostOrderConfirmSerializer,
+        responses={200: OpenApiTypes.OBJECT},
+        tags=["Boost Listings"],
+    ),
+)
+class BoostOrderViewSet(viewsets.GenericViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = BoostOrder.objects.all()
+
+    @action(detail=True, methods=["post"], url_path="confirm")
+    def confirm(self, request, pk=None):
+        order = get_object_or_404(BoostOrder, pk=pk)
+
+        # Ensure order belongs to requesting user
+        if order.user != request.user:
+            return Response(
+                {"detail": "You do not have permission to confirm this order."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if order.status == BoostOrder.Status.SUCCESS:
+            return Response(
+                {
+                    "detail": "Boost order has already been confirmed.",
+                    "order": BoostOrderResponseSerializer(order).data,
+                    "listing_id": order.listing.id,
+                    "is_boosted": True,
+                    "boost_expires_at": order.listing.boost_expires_at,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        serializer = BoostOrderConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        gateway = get_payment_gateway()
+        is_verified = gateway.verify_payment(order, serializer.validated_data)
+
+        if is_verified:
+            order.status = BoostOrder.Status.SUCCESS
+            order.paid_at = timezone.now()
+            txn_id = serializer.validated_data.get("gateway_transaction_id")
+            if txn_id:
+                order.gateway_transaction_id = txn_id
+            order.save(update_fields=["status", "paid_at", "gateway_transaction_id"])
+
+            listing = order.listing
+            listing.is_boosted = True
+            listing.boost_expires_at = timezone.now() + timedelta(days=order.plan.duration_days)
+            listing.save(update_fields=["is_boosted", "boost_expires_at"])
+
+            return Response(
+                {
+                    "detail": "Boost payment confirmed and listing activated successfully.",
+                    "order": BoostOrderResponseSerializer(order).data,
+                    "listing_id": listing.id,
+                    "is_boosted": True,
+                    "boost_expires_at": listing.boost_expires_at,
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            order.status = BoostOrder.Status.FAILED
+            order.save(update_fields=["status"])
+            return Response(
+                {"detail": "Payment verification failed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 

@@ -6,6 +6,8 @@ from apps.marketplace.models import (
     BookRequirement,
     ListingAnalyticsDaily,
     PlatformReport,
+    BoostPlan,
+    BoostOrder,
 )
 
 
@@ -23,13 +25,41 @@ class BookListingAdmin(admin.ModelAdmin):
         "price",
         "condition",
         "status",
+        "is_boosted",
+        "boost_expires_at",
         "created_at",
     )
-    list_filter = ("condition", "status", "created_at")
+    list_filter = ("is_boosted", "condition", "status", "created_at")
     search_fields = ("book__title", "seller__full_name", "seller__email")
     # Keeps spatial coordinate entries secure
     readonly_fields = ("latitude", "longitude")
     inlines = [BookListingImageInline]
+
+
+@admin.register(BoostPlan)
+class BoostPlanAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "duration_days", "price", "is_active", "created_at")
+    list_filter = ("is_active", "duration_days")
+    search_fields = ("name",)
+
+
+@admin.register(BoostOrder)
+class BoostOrderAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "listing",
+        "user",
+        "plan",
+        "amount",
+        "status",
+        "payment_method",
+        "gateway_transaction_id",
+        "created_at",
+        "paid_at",
+    )
+    list_filter = ("status", "payment_method", "created_at")
+    search_fields = ("listing__book__title", "user__full_name", "user__email", "gateway_transaction_id")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(BookListingImage)

@@ -8,7 +8,7 @@ import { rem } from "@/utils/responsive";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from "react-native";
@@ -340,7 +340,7 @@ const MyListingsScreen = () => {
         title="Edit Listing"
         backButton
         rightElement={
-          <TouchableOpacity onPress={() => navigation.navigate("PublicProfile")}>
+          <TouchableOpacity onPress={() => router.push("/(screens)/PublicProfile")}>
             <Ionicons name="eye-outline" size={25} color={COLORS.primary} />
           </TouchableOpacity>
         }
@@ -476,7 +476,7 @@ const MyListingsScreen = () => {
                 title="Boost Now"
                 style={styles.boostBtn}
                 textStyle={styles.boostBtnText}
-                onPress={() => navigation.navigate("AppStack", { screen: "BoostListing" })}
+                onPress={() => router.push("/(screens)/BoostListing")}
               />
             </View>
           </SectionCard>

@@ -3,7 +3,7 @@ import { COLORS } from "@/constants/colors";
 import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
-import { useNavigation, useRoute } from "expo-router";
+import { router, useNavigation, useRoute } from "expo-router";
 import { Image } from "expo-image";
 import React from "react";
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -15,10 +15,18 @@ const COLUMN_GAP = SPACING.md;
 const PADDING_HORIZONTAL = SPACING.lg;
 const BOOK_CARD_WIDTH = (width - PADDING_HORIZONTAL * 2 - COLUMN_GAP) / 2;
 
-
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/clients";
 import { BookCardSkeleton } from "@/components/skeleton/SkeletonLoader";
+
+const getAuthorInitials = (name: string) => {
+  if (!name) return "A";
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
 
 const AuthorDetailsScreen = () => {
   const insets = useSafeAreaInsets();
@@ -26,7 +34,11 @@ const AuthorDetailsScreen = () => {
   const route = useRoute<any>();
 
   // Author can come from either AuthorListScreen (Author type) or HomeScreen (AuthorItem type)
-  const author = route.params?.author ? (typeof route.params.author === 'string' ? JSON.parse(route.params.author) : route.params.author) : null;
+  const author = route.params?.author
+    ? typeof route.params.author === "string"
+      ? JSON.parse(route.params.author)
+      : route.params.author
+    : null;
 
   const { data: booksData, isLoading } = useQuery({
     queryKey: ["author-books", author?.name],
@@ -41,18 +53,35 @@ const AuthorDetailsScreen = () => {
   const authorBooks = React.useMemo(() => {
     if (!booksData?.results) return [];
     return booksData.results.map((item: any) => {
-      const activeListing = item.ranked_listings?.[0] || item.listings?.[0];
+      const activeListing =
+        item.cheapest_listing ||
+        (item.listings && item.listings.length > 0 ? item.listings[0] : null) ||
+        (item.ranked_listings && item.ranked_listings.length > 0 ? item.ranked_listings[0] : null);
+
+      const listingId = activeListing?.id ? String(activeListing.id) : null;
+      const price = activeListing
+        ? parseFloat(activeListing.price)
+        : item.lowest_price
+        ? parseFloat(item.lowest_price)
+        : 250;
+
+      const imageUri =
+        activeListing?.cover_image_url ||
+        activeListing?.listing_images?.[0]?.image_url ||
+        item.cover_url ||
+        "";
+
       return {
-        id: String(activeListing?.id || item.id),
+        id: String(item.id),
+        listingId: listingId,
         title: item.title,
-        price: activeListing ? parseFloat(activeListing.price) : 250,
-        imageUri:
-          activeListing?.listing_images?.[0]?.image_url ||
-          item.cover_url ||
-          "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
+        price: price,
+        imageUri: imageUri,
+        authorsList: item.authors || (author?.name ? [{ name: author.name }] : []),
+        description: item.description || "",
       };
     });
-  }, [booksData]);
+  }, [booksData, author?.name]);
 
   if (!author) {
     return (
@@ -65,9 +94,9 @@ const AuthorDetailsScreen = () => {
     );
   }
 
-  const imageSource = author.imageUri || author.photoUri || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop";
-  const category = author.category || "Author";
-  const rating = author.rating || 4.0;
+  const imageSource = author.imageUri || author.photoUri || author.image_url || "";
+  const category = author.category || author.designation || "Author";
+  const rating = author.rating ? parseFloat(author.rating) : 4.8;
 
   // Fallback bio if empty
   const fullBio =
@@ -82,7 +111,13 @@ const AuthorDetailsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Profile Section */}
         <View style={styles.profileSection}>
-          <Image source={{ uri: imageSource }} style={styles.image} contentFit="fill" />
+          {imageSource ? (
+            <Image source={{ uri: imageSource }} style={styles.image} contentFit="fill" />
+          ) : (
+            <View style={[styles.image, styles.initialsContainer]}>
+              <Text style={styles.initialsText}>{getAuthorInitials(author.name)}</Text>
+            </View>
+          )}
           <Text style={styles.category}>{category}</Text>
           <Text style={styles.name}>{author.name}</Text>
 
@@ -121,9 +156,26 @@ const AuthorDetailsScreen = () => {
                 <TouchableOpacity
                   key={book.id}
                   style={styles.bookCard}
-                  onPress={() =>
-                    navigation.navigate("AppStack", { screen: "BookDetails", params: { listingId: book.id } })
-                  }
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/(screens)/BookDetails",
+                      params: {
+                        listingId: book.listingId || book.id,
+                        book: JSON.stringify({
+                          id: book.listingId || book.id,
+                          bookId: book.id,
+                          title: book.title,
+                          coverUri: book.imageUri,
+                          price: book.price,
+                          authorsList: book.authorsList,
+                          description: book.description,
+                          condition: "Good",
+                        }),
+                        categoryTitle: category || "Author Books",
+                      },
+                    });
+                  }}
                 >
                   <Image source={{ uri: book.imageUri }} style={styles.bookCover} contentFit="fill" />
                   <Text style={styles.bookTitle} numberOfLines={1}>
@@ -183,6 +235,17 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     marginBottom: SPACING.sm,
+  },
+  initialsContainer: {
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontSize: rem(2),
+    fontFamily: FONTS.montserrat.bold,
+    color: COLORS.white,
+    letterSpacing: 1,
   },
   category: {
     fontSize: rem(0.875),

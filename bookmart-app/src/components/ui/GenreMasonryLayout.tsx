@@ -6,7 +6,7 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -67,8 +67,8 @@ const MasonryBookCard = memo(({ book, navigation }: { book: any; navigation: any
     <TouchableOpacity
       style={styles.cardContainer}
       onPress={() =>
-        navigation.navigate("AppStack", {
-          screen: "BookDetails",
+        router.push({
+          pathname: "/(screens)/BookDetails",
           params: { listingId: book.id, categoryTitle: book.genre || "Genre" },
         })
       }

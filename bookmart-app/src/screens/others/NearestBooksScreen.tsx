@@ -8,7 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useNavigation, useRoute } from "expo-router";
+import { router, useNavigation, useRoute } from "expo-router";
 import React, { useCallback, useMemo, useState, useEffect, memo } from "react";
 import { Dimensions, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from "react-native-reanimated";
@@ -85,6 +85,15 @@ const NearestBooksScreen = () => {
     requestLocation();
   }, []);
 
+  // Fetch user profile
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/core/profile/me/");
+      return response.data;
+    },
+  });
+
   // Fetch real listings
   const { data: listingsData, isLoading: isLoadingListings, refetch } = useQuery({
     queryKey: ["all-listings"],
@@ -112,8 +121,18 @@ const NearestBooksScreen = () => {
   const processedBooks = useMemo(() => {
     if (!listingsData?.results) return [];
     
+    const currentUserId = userProfile?.user_id;
+    const currentUserEmail = userProfile?.email;
+
+    // Filter out user's own listings
+    const candidateListings = listingsData.results.filter((item: any) => {
+      if (currentUserId && (item.seller?.id === currentUserId || item.seller_id === currentUserId)) return false;
+      if (currentUserEmail && item.seller?.email && item.seller.email.toLowerCase() === currentUserEmail.toLowerCase()) return false;
+      return true;
+    });
+
     // 1. Map backend listings and calculate distance
-    let books = listingsData.results.map((item: any) => {
+    let books = candidateListings.map((item: any) => {
       let distanceKm = 99999;
       if (userLocation && item.latitude && item.longitude) {
         distanceKm = getDistanceKm(
@@ -170,15 +189,12 @@ const NearestBooksScreen = () => {
     return books;
   }, [listingsData, userLocation, activeCategoryId, activeFilter, searchQuery, priceRange, categories]);
 
-  const handleBookPress = useCallback(
-    (book: any) => {
-      navigation.navigate("AppStack", {
-        screen: "BookDetails",
-        params: { listingId: book.id, categoryTitle: "Nearest" },
-      });
-    },
-    [navigation]
-  );
+  const handleBookPress = useCallback((book: any) => {
+    router.push({
+      pathname: "/(screens)/BookDetails",
+      params: { listingId: book.id, categoryTitle: "Nearest" },
+    });
+  }, []);
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -206,7 +222,12 @@ const NearestBooksScreen = () => {
     <View style={styles.filtersWrapper}>
       <TouchableOpacity
         style={styles.inlineMapButton}
-        onPress={() => navigation.navigate("NearestBooksMap", { categoryId: activeCategoryId })}
+        onPress={() =>
+          router.push({
+            pathname: "/(screens)/NearestBooksMap",
+            params: { categoryId: activeCategoryId },
+          })
+        }
       >
         <Ionicons name="map" size={20} color={COLORS.primary} />
       </TouchableOpacity>

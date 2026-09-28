@@ -13,7 +13,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { router, useNavigation, useRoute } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useRef, useState } from "react";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,12 +27,38 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ────────────────────────────────────────────────────────────────────
 // Helpers & Constants
 // ────────────────────────────────────────────────────────────────────
+
+const DEFAULT_COORDS = { latitude: 22.8943, longitude: 88.4239 };
+
+const formatAddress = (place: any, coords: { latitude: number; longitude: number }) => {
+  if (!place) return `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+  const parts = [
+    place.name,
+    place.street,
+    place.subregion || place.district,
+    place.city,
+    place.region,
+    place.postalCode,
+  ].filter(Boolean);
+
+  const uniqueParts: string[] = [];
+  parts.forEach((p) => {
+    const trimmed = String(p).trim();
+    if (trimmed && !uniqueParts.includes(trimmed)) {
+      uniqueParts.push(trimmed);
+    }
+  });
+
+  return uniqueParts.length > 0
+    ? uniqueParts.join(", ")
+    : `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+};
 
 const showToast = (message: string) => {
   if (Platform.OS === "android") {
@@ -276,6 +303,16 @@ const CreateScreen = () => {
     address: string;
   } | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const mapRef = useRef<MapView>(null);
+
+  // ── User Profile for fallback location ──
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/core/profile/me/");
+      return response.data;
+    },
+  });
 
   // ── Genre fallback list ──
   const BOOK_GENRES = [
@@ -312,6 +349,14 @@ const CreateScreen = () => {
       setNotes(editListingData.condition_notes || "");
       setBookId(editListingData.book.id || null);
 
+      if (editListingData.latitude && editListingData.longitude) {
+        setLocation({
+          latitude: parseFloat(editListingData.latitude),
+          longitude: parseFloat(editListingData.longitude),
+          address: userProfile?.city_location || "Saved Listing Location",
+        });
+      }
+
       const genreNames = editListingData.book.genres?.map((g: any) => (typeof g === "string" ? g : g.name)) || [];
       if (genreNames.length > 0) {
         setGenreInput(genreNames[0]);
@@ -336,7 +381,7 @@ const CreateScreen = () => {
       setImages(loadedImages);
       setUploadProgress(loadedProgress);
     }
-  }, [editListingData]);
+  }, [editListingData, userProfile]);
 
   // ── Debounced Book Title Search ──
   useEffect(() => {
@@ -531,39 +576,195 @@ const CreateScreen = () => {
   const isSlotValid = (index: number) => !!images[index] && uploadProgress[index] === 100;
   const isUploadValid = () => isSlotValid(0) && isSlotValid(1) && isSlotValid(2) && isSlotValid(3);
 
+  // ── Diagnostic Logging on Mount ──
+  useEffect(() => {
+    const isExpoGo =
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+      Constants.appOwnership === "expo";
+    const rawKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
+    const redactedKey = rawKey
+      ? `${rawKey.slice(0, 4)}...${rawKey.slice(-4)}`
+      : "UNDEFINED";
+    console.log("==================================================");
+    console.log(`[MAP_DIAGNOSTICS] Runtime Environment: ${isExpoGo ? "EXPO_GO" : "CUSTOM_DEV_BUILD / STANDALONE"}`);
+    console.log(`[MAP_DIAGNOSTICS] App Ownership: ${Constants.appOwnership || "standalone"}`);
+    console.log(`[MAP_DIAGNOSTICS] Execution Environment: ${Constants.executionEnvironment}`);
+    console.log(`[MAP_DIAGNOSTICS] Resolved Google Maps API Key: ${redactedKey}`);
+    console.log("==================================================");
+  }, []);
+
+  const isExpoGo =
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+    Constants.appOwnership === "expo";
+
   // ── Location ──
-  const getCurrentLocation = async () => {
-    setIsFetchingLocation(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        showToast("Location permission is required to fetch pickup address.");
-        return false;
-      }
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const reverse = await Location.reverseGeocodeAsync({
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-      });
-      const place = reverse[0];
-      const addressString =
-        `${place?.name ? place.name + ", " : ""}${place?.street ? place.street + ", " : ""}${place?.city ? place.city : ""}`.replace(
-          /, $/,
-          ""
+  const getCurrentLocation = useCallback(
+    async (isManual = false) => {
+      setIsFetchingLocation(true);
+      console.log("==================================================");
+      console.log("[LOCATION_DIAGNOSTICS] Starting location detection...");
+      console.log("[LOCATION_DIAGNOSTICS] Trigger mode:", isManual ? "MANUAL_REFRESH" : "AUTO_DETECT");
+      console.log("[LOCATION_DIAGNOSTICS] Profile city location:", userProfile?.city_location || "None");
+
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        console.log("[LOCATION_DIAGNOSTICS] Permission status:", status);
+
+        if (status !== "granted") {
+          console.log("[LOCATION_DIAGNOSTICS] (c) Permission not granted -> Fallback triggered (user profile / DEFAULT_COORDS)");
+          if (isManual) {
+            showToast("Location permission denied. Using campus default.");
+          }
+          const defaultAddress = userProfile?.city_location || "Campus Area Pickup Point";
+          setLocation((prev) => prev || {
+            latitude: DEFAULT_COORDS.latitude,
+            longitude: DEFAULT_COORDS.longitude,
+            address: defaultAddress,
+          });
+          return;
+        }
+
+        // (a) getLastKnownPositionAsync
+        let lastKnownCoords: { latitude: number; longitude: number } | null = null;
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync({});
+          console.log(
+            "[LOCATION_DIAGNOSTICS] (a) getLastKnownPositionAsync returned:",
+            lastKnown ? JSON.stringify(lastKnown.coords) : "null (No cached position found)"
+          );
+          if (lastKnown?.coords) {
+            lastKnownCoords = {
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+            };
+          }
+        } catch (e: any) {
+          console.log("[LOCATION_DIAGNOSTICS] (a) getLastKnownPositionAsync error:", e?.message || e);
+        }
+
+        // (b) getCurrentPositionAsync
+        let currentLiveCoords: { latitude: number; longitude: number } | null = null;
+        try {
+          const currentPosPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          const timeoutPromise = new Promise<null>((_, reject) =>
+            setTimeout(() => reject(new Error("5-second GPS timeout")), 5000)
+          );
+          const pos = (await Promise.race([currentPosPromise, timeoutPromise])) as any;
+          console.log(
+            "[LOCATION_DIAGNOSTICS] (b) getCurrentPositionAsync returned:",
+            pos ? JSON.stringify(pos.coords) : "null (Timeout or unavailable)"
+          );
+          if (pos?.coords) {
+            currentLiveCoords = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+            };
+          }
+        } catch (e: any) {
+          console.log("[LOCATION_DIAGNOSTICS] (b) getCurrentPositionAsync error/timeout:", e?.message || e);
+        }
+
+        // (c) Determine if fallback is triggered
+        const resolvedCoords = currentLiveCoords || lastKnownCoords;
+        const triggeredFallback = !resolvedCoords;
+        console.log(
+          `[LOCATION_DIAGNOSTICS] (c) Fallback-to-saved-profile triggered? ${triggeredFallback ? "YES (using DEFAULT_COORDS 22.8943, 88.4239)" : "NO (using real GPS coordinates)"}`
         );
+
+        const finalCoords = resolvedCoords || DEFAULT_COORDS;
+        let addressString = userProfile?.city_location || "";
+
+        try {
+          const reverse = await Location.reverseGeocodeAsync(finalCoords);
+          console.log("[LOCATION_DIAGNOSTICS] Reverse geocoding result:", JSON.stringify(reverse?.[0] || null));
+          if (reverse && reverse.length > 0) {
+            addressString = formatAddress(reverse[0], finalCoords);
+          }
+        } catch (e: any) {
+          console.log("[LOCATION_DIAGNOSTICS] Reverse geocoding error:", e?.message || e);
+          if (!addressString) {
+            addressString = `${finalCoords.latitude.toFixed(4)}, ${finalCoords.longitude.toFixed(4)}`;
+          }
+        }
+
+        console.log(`[LOCATION_DIAGNOSTICS] Final Coordinates: [${finalCoords.latitude}, ${finalCoords.longitude}]`);
+        console.log(`[LOCATION_DIAGNOSTICS] Final Address: "${addressString}"`);
+        console.log("==================================================");
+
+        const newLoc = {
+          latitude: finalCoords.latitude,
+          longitude: finalCoords.longitude,
+          address: addressString,
+        };
+
+        setLocation(newLoc);
+
+        mapRef.current?.animateToRegion(
+          {
+            latitude: newLoc.latitude,
+            longitude: newLoc.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          },
+          500
+        );
+
+        if (isManual) {
+          showToast("Location updated successfully");
+        }
+      } catch (err) {
+        console.error("[LOCATION_DIAGNOSTICS] Location error:", err);
+        if (isManual) {
+          showToast("Could not detect exact GPS. Using campus default.");
+        }
+        setLocation((prev) => prev || {
+          latitude: DEFAULT_COORDS.latitude,
+          longitude: DEFAULT_COORDS.longitude,
+          address: userProfile?.city_location || "Campus Area Pickup Point",
+        });
+      } finally {
+        setIsFetchingLocation(false);
+      }
+    },
+    [userProfile]
+  );
+
+  useEffect(() => {
+    getCurrentLocation(false);
+  }, [getCurrentLocation]);
+
+  const updateLocationFromCoords = useCallback(
+    async (newCoords: { latitude: number; longitude: number }) => {
+      let addressString = location?.address || "";
+      try {
+        const reverse = await Location.reverseGeocodeAsync(newCoords);
+        if (reverse && reverse.length > 0) {
+          addressString = formatAddress(reverse[0], newCoords);
+        }
+      } catch (e) {
+        addressString = `${newCoords.latitude.toFixed(4)}, ${newCoords.longitude.toFixed(4)}`;
+      }
+
       setLocation({
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-        address: addressString || "Location found, but address is unavailable.",
+        latitude: newCoords.latitude,
+        longitude: newCoords.longitude,
+        address: addressString,
       });
-      return true;
-    } catch (error) {
-      showToast("Failed to fetch location. Please ensure GPS is enabled.");
-      return false;
-    } finally {
-      setIsFetchingLocation(false);
-    }
-  };
+
+      mapRef.current?.animateToRegion(
+        {
+          latitude: newCoords.latitude,
+          longitude: newCoords.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        },
+        300
+      );
+    },
+    [location?.address]
+  );
 
   // ── Step Navigation ──
   const handleStep1Next = () => {
@@ -582,14 +783,14 @@ const CreateScreen = () => {
     setCurrentStep(2);
   };
 
-  const handleStep2Next = async () => {
+  const handleStep2Next = () => {
     if (!price.trim() || isNaN(Number(price)) || Number(price) <= 0) {
       showToast("Please enter a valid price");
       return;
     }
-    // Fetch location before moving to step 3
-    const success = await getCurrentLocation();
-    if (!success) return;
+    if (!location) {
+      getCurrentLocation(false);
+    }
     setCurrentStep(3);
   };
 
@@ -1025,75 +1226,83 @@ const CreateScreen = () => {
               />
             </View>
 
-            {location ? (
-              <View style={styles.sectionCard}>
-                <View style={styles.locationHeader}>
-                  <Ionicons name="location" size={22} color={COLORS.primary} />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.locationTitle}>Pickup Location</Text>
-                    <Text style={styles.locationAddress} numberOfLines={2}>
-                      {location.address}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={getCurrentLocation}
-                    disabled={isFetchingLocation}
-                    style={styles.refreshBtn}
-                  >
-                    {isFetchingLocation ? (
-                      <ActivityIndicator size="small" color={COLORS.primary} />
-                    ) : (
-                      <Ionicons name="refresh" size={20} color={COLORS.primary} />
-                    )}
-                  </TouchableOpacity>
+            {/* Pickup Location Card */}
+            <View style={styles.sectionCard}>
+              <View style={styles.locationHeader}>
+                <View style={styles.locationIconWrap}>
+                  <Ionicons name="location" size={20} color={COLORS.primary} />
                 </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.locationTitle}>Pickup Location</Text>
+                  <Text style={styles.locationSubtitle}>
+                    {isFetchingLocation
+                      ? "Detecting your location…"
+                      : "Buyers will see this general pickup area"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => getCurrentLocation(true)}
+                  disabled={isFetchingLocation}
+                  style={styles.refreshBtn}
+                  activeOpacity={0.7}
+                >
+                  {isFetchingLocation ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : (
+                    <Ionicons name="locate" size={18} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
+              </View>
 
-                <View style={styles.mapWrapper}>
-                  <MapView
-                    key={`map-${location.latitude.toFixed(6)}-${location.longitude.toFixed(6)}`}
-                    style={{ width: "100%", height: 180 }}
-                    initialRegion={{
-                      latitude: location.latitude,
-                      longitude: location.longitude,
-                      latitudeDelta: 0.005,
-                      longitudeDelta: 0.005,
+              <View style={styles.mapWrapper}>
+                <MapView
+                  ref={mapRef}
+                  key={`map-${location?.latitude ? location.latitude.toFixed(4) : "default"}-${location?.longitude ? location.longitude.toFixed(4) : "default"}`}
+                  style={styles.map}
+                  provider={Platform.OS === "android" && !isExpoGo ? PROVIDER_GOOGLE : undefined}
+                  initialRegion={{
+                    latitude: location?.latitude || DEFAULT_COORDS.latitude,
+                    longitude: location?.longitude || DEFAULT_COORDS.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                  onPress={(e) => updateLocationFromCoords(e.nativeEvent.coordinate)}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: location?.latitude || DEFAULT_COORDS.latitude,
+                      longitude: location?.longitude || DEFAULT_COORDS.longitude,
                     }}
-                    liteMode={Platform.OS === "android"}
-                    pitchEnabled={false}
-                    rotateEnabled={false}
-                    scrollEnabled={false}
-                    zoomEnabled={false}
+                    draggable
+                    onDragEnd={(e) => updateLocationFromCoords(e.nativeEvent.coordinate)}
                   >
-                    <Marker coordinate={{ latitude: location.latitude, longitude: location.longitude }}>
-                      <View style={styles.markerDot}>
-                        <Ionicons name="location" size={22} color={COLORS.white} />
-                      </View>
-                    </Marker>
-                  </MapView>
+                    <View style={styles.markerDot}>
+                      <Ionicons name="location" size={20} color={COLORS.white} />
+                    </View>
+                  </Marker>
+                </MapView>
+                <View style={styles.mapHintBadge}>
+                  <Ionicons name="hand-left-outline" size={13} color={COLORS.white} />
+                  <Text style={styles.mapHintText}>Tap map or drag pin to adjust</Text>
                 </View>
               </View>
-            ) : (
-              <View style={styles.sectionCard}>
-                <View style={styles.locationHeader}>
-                  <Ionicons name="location-outline" size={22} color={COLORS.textMuted} />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.locationTitle}>Pickup Location</Text>
-                    <Text style={styles.locationAddress}>Fetching your location…</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={getCurrentLocation}
-                    disabled={isFetchingLocation}
-                    style={styles.refreshBtn}
-                  >
-                    {isFetchingLocation ? (
-                      <ActivityIndicator size="small" color={COLORS.primary} />
-                    ) : (
-                      <Ionicons name="refresh" size={20} color={COLORS.primary} />
-                    )}
-                  </TouchableOpacity>
-                </View>
+
+              <View style={{ marginTop: SPACING.md }}>
+                <Text style={styles.fieldLabel}>Pickup Address / Landmark</Text>
+                <Input
+                  placeholder="e.g. Central Library Gate, Hostel 3, Main Campus"
+                  value={location?.address || ""}
+                  onChangeText={(text) => {
+                    setLocation((prev) =>
+                      prev
+                        ? { ...prev, address: text }
+                        : { latitude: DEFAULT_COORDS.latitude, longitude: DEFAULT_COORDS.longitude, address: text }
+                    );
+                  }}
+                  containerStyle={{ marginVertical: 0 }}
+                />
               </View>
-            )}
+            </View>
 
             <View style={styles.actionRow}>
               <Button
@@ -1370,46 +1579,77 @@ const styles = StyleSheet.create({
   locationHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  locationIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: COLORS.secondary,
+    alignItems: "center",
+    justifyContent: "center",
   },
   locationTitle: {
-    fontSize: rem(0.875),
+    fontSize: rem(0.9375),
     fontFamily: FONTS.manrope.bold,
     color: COLORS.black,
   },
-  locationAddress: {
+  locationSubtitle: {
     fontSize: rem(0.75),
     fontFamily: FONTS.manrope.regular,
     color: COLORS.textMuted,
     marginTop: 2,
   },
   refreshBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.secondary,
+    backgroundColor: COLORS.secondary,
     alignItems: "center",
     justifyContent: "center",
   },
   mapWrapper: {
-    height: 180,
-    borderRadius: 14,
+    height: 190,
+    borderRadius: 16,
     overflow: "hidden",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: COLORS.grayLight,
   },
-  map: { ...StyleSheet.absoluteFill },
+  map: { width: "100%", height: "100%" },
   markerDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 4,
+    elevation: 6,
     shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    borderWidth: 2.5,
+    borderColor: COLORS.white,
+  },
+  mapHintBadge: {
+    position: "absolute",
+    bottom: 10,
+    alignSelf: "center",
+    backgroundColor: "rgba(18, 18, 24, 0.78)",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  mapHintText: {
+    fontSize: rem(0.6875),
+    fontFamily: FONTS.manrope.medium,
+    color: COLORS.white,
   },
 
   // Action buttons

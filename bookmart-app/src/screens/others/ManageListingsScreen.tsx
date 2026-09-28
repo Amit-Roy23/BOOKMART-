@@ -89,7 +89,7 @@ export default function ManageListingsScreen() {
 
   const handleListingPress = (item: any) => {
     // Navigate to listings update edit view
-    navigation.navigate("MyListings");
+    router.push("/(screens)/MyListings");
   };
 
   const getStatusColor = (status: string) => {

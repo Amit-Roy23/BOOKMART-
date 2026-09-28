@@ -6,7 +6,11 @@ from django.db.models import FloatField, Q
 from django.db.models.expressions import RawSQL
 
 from apps.books.models import Author, Book
-from apps.books.services import import_book_from_openlibrary, process_genre_input
+from apps.books.services import (
+    enrich_author_details,
+    import_book_from_openlibrary,
+    process_genre_input,
+)
 from apps.marketplace.models import BookListing, BookListingImage
 
 
@@ -242,6 +246,14 @@ def create_book_listing(seller, data):
                 image=file_obj,
                 label=label,
             )
+
+    # Automatically enrich authors with AI/biographical details upon listing
+    if book:
+        for author in book.authors.all():
+            try:
+                enrich_author_details(author, book_title=book.title, genre=custom_genre)
+            except Exception:
+                pass
 
     return listing
 

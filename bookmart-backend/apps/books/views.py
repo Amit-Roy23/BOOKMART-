@@ -1,6 +1,6 @@
 import logging
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -344,7 +344,16 @@ class RecommendationViewSet(viewsets.ReadOnlyModelViewSet):
 )
 class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    queryset = Author.objects.all().order_by("name")
     serializer_class = AuthorSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ["name"]
+
+    def get_queryset(self):
+        # Only return authors of books that have active/available listings from other sellers
+        qs = Author.objects.filter(
+            books__listings__isnull=False,
+            books__listings__status="AVAILABLE",
+        )
+        if self.request.user.is_authenticated:
+            qs = qs.filter(~Q(books__listings__seller=self.request.user))
+        return qs.distinct().order_by("name")

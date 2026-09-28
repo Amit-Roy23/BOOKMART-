@@ -5,7 +5,7 @@ import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { LineChart } from "react-native-gifted-charts";
@@ -134,8 +134,8 @@ const AnalyticsScreen = () => {
   }, [myListings]);
 
   const handleBookPress = (book: any) => {
-    navigation.navigate("AppStack", {
-      screen: "BookDetails",
+    router.push({
+      pathname: "/(screens)/BookDetails",
       params: {
         listingId: book.id,
         categoryTitle: "Top Performing",
@@ -306,7 +306,7 @@ const AnalyticsScreen = () => {
           {/* Active Listings Card */}
           <TouchableOpacity
             style={styles.activeListingsCard}
-            onPress={() => navigation.navigate("AppStack", { screen: "MyActiveListings" })}
+            onPress={() => router.push("/(screens)/MyActiveListings")}
             activeOpacity={0.8}
           >
             <View style={styles.activeListingsLeft}>

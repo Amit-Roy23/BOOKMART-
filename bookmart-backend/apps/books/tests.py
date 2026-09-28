@@ -453,18 +453,49 @@ class BookViewSetTests(APITestCase):
 class AuthorViewSetTests(APITestCase):
 
     def setUp(self):
+        from apps.marketplace.models import BookListing
+
+        self.user = User.objects.create_user(
+            email="authoruser@example.com",
+            full_name="Author User",
+            password="testpassword123",
+        )
         self.author1 = Author.objects.create(name="Author One", designation="Novelist", bio="Bio one")
         self.author2 = Author.objects.create(name="Author Two", designation="Poet", bio="Bio two")
+        self.author_unlisted = Author.objects.create(name="Unlisted Author", designation="Writer", bio="No books listed")
 
-    def test_list_authors(self):
+        self.book1 = Book.objects.create(title="Book One")
+        self.book1.authors.add(self.author1)
+
+        self.book2 = Book.objects.create(title="Book Two")
+        self.book2.authors.add(self.author2)
+
+        # Create listings for book1 and book2
+        BookListing.objects.create(book=self.book1, seller=self.user, price=100, condition="GOOD")
+        BookListing.objects.create(book=self.book2, seller=self.user, price=200, condition="NEW")
+
+    def test_list_authors_only_with_listings(self):
         url = "/api/v1/book/authors/"
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
-        self.assertEqual(response.data["results"][0]["name"], "Author One")
+        names = [item["name"] for item in response.data["results"]]
+        self.assertIn("Author One", names)
+        self.assertIn("Author Two", names)
+        self.assertNotIn("Unlisted Author", names)
 
     def test_retrieve_author(self):
         url = f"/api/v1/book/authors/{self.author1.id}/"
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], "Author One")
+
+    def test_enrich_author_details(self):
+        from apps.books.services import enrich_author_details
+
+        new_author = Author.objects.create(name="Rabindranath Tagore")
+        enriched = enrich_author_details(new_author, book_title="Gitanjali", genre="Poetry")
+        self.assertTrue(len(enriched.bio) > 0)
+        self.assertTrue(len(enriched.designation) > 0)
+        self.assertTrue(len(enriched.image_url) > 0)
+        self.assertGreater(enriched.rating, 0)

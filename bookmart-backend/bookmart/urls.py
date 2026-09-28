@@ -46,6 +46,18 @@ urlpatterns = [
     path("api/v1/", include("apps.notifications.urls")),
     path("api/v1/", include("apps.reviews.urls")),
     path("api/v1/", include("apps.tags.urls")),
+    # API Schema & Documentation
+    path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="api-swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="api-redoc",
+    ),
     path("docs/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "docs/swagger/",

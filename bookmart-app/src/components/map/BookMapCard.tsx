@@ -4,7 +4,7 @@ import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import React, { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
@@ -61,8 +61,8 @@ const BookMapCard: React.FC<BookMapCardProps> = ({ book, userLocation, onPress, 
   };
 
   const handleViewDetails = () => {
-    navigation.navigate("AppStack", {
-      screen: "BookDetails",
+    router.push({
+      pathname: "/(screens)/BookDetails",
       params: {
         listingId: book.id,
         categoryTitle: book.genre || "Nearest Map",

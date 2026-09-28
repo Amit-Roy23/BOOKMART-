@@ -4,7 +4,7 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import React, { useState } from "react";
@@ -80,7 +80,12 @@ const FavouritesScreen = () => {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.8}
-      onPress={() => navigation.navigate("AppStack", { screen: "BookDetails", params: { listingId: item.listingId } })}
+      onPress={() =>
+        router.push({
+          pathname: "/(screens)/BookDetails",
+          params: { listingId: item.listingId, categoryTitle: "Favorites" },
+        })
+      }
     >
       <Image source={item.image} style={styles.bookImage} contentFit="cover" transition={200} />
       <View style={styles.cardContent}>

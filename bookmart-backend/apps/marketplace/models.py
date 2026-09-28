@@ -46,6 +46,7 @@ class BookListing(models.Model):
     )
 
     is_boosted = models.BooleanField(default=False, db_index=True)
+    boost_expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     views_count = models.PositiveIntegerField(default=0, db_index=True)
 
     tags = GenericRelation("tags.TaggedItem")
@@ -323,3 +324,53 @@ def create_notification_on_contact(sender, instance, created, **kwargs):
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Error generating PlatformNotification on BookContactLedger create: {str(e)}")
+
+
+class BoostPlan(models.Model):
+    name = models.CharField(max_length=100)
+    duration_days = models.PositiveIntegerField(help_text="Duration of the boost in days")
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["price"]
+
+    def __str__(self):
+        return f"{self.name} ({self.duration_days} days) - ₹{self.price}"
+
+
+class BoostOrder(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+
+    listing = models.ForeignKey(
+        BookListing, on_delete=models.CASCADE, related_name="boost_orders"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="boost_orders"
+    )
+    plan = models.ForeignKey(
+        BoostPlan, on_delete=models.PROTECT, related_name="orders"
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True
+    )
+    payment_method = models.CharField(
+        max_length=50, default="UPI"
+    )
+    gateway_transaction_id = models.CharField(
+        max_length=255, null=True, blank=True
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Order #{self.id} - {self.listing.book.title} ({self.status})"

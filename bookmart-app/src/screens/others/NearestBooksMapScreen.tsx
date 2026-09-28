@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
-import { useNavigation, useRoute } from "expo-router";
+import { router, useNavigation, useRoute } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -155,6 +155,15 @@ const NearestBooksMapScreen = () => {
   const [locationServicesEnabled, setLocationServicesEnabled] = useState<boolean>(true);
   const [isUsingMockLocation, setIsUsingMockLocation] = useState<boolean>(false);
 
+  // Fetch user profile
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/core/profile/me/");
+      return response.data;
+    },
+  });
+
   // Fetch real listings
   const { data: listingsData } = useQuery({
     queryKey: ["all-listings"],
@@ -186,8 +195,16 @@ const NearestBooksMapScreen = () => {
   const processedBooks = useMemo(() => {
     if (!listingsData?.results) return [];
 
+    const currentUserId = userProfile?.user_id;
+    const currentUserEmail = userProfile?.email;
+
     let books = listingsData.results
-      .filter((item: any) => item.latitude && item.longitude)
+      .filter((item: any) => {
+        if (!item.latitude || !item.longitude) return false;
+        if (currentUserId && (item.seller?.id === currentUserId || item.seller_id === currentUserId)) return false;
+        if (currentUserEmail && item.seller?.email && item.seller.email.toLowerCase() === currentUserEmail.toLowerCase()) return false;
+        return true;
+      })
       .map((item: any) => ({
         id: String(item.id),
         title: item.book.title,
@@ -391,8 +408,11 @@ const NearestBooksMapScreen = () => {
   }, [userLocation]);
 
   const handleToggleScreen = useCallback(() => {
-    navigation.navigate("NearestBooks", { categoryId: activeCategoryId });
-  }, [navigation, activeCategoryId]);
+    router.push({
+      pathname: "/(screens)/NearestBooks",
+      params: { categoryId: activeCategoryId },
+    });
+  }, [activeCategoryId]);
 
   const handleOpenSettings = useCallback(() => {
     if (Platform.OS === "ios") {

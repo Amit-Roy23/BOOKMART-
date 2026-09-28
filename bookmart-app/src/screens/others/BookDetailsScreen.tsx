@@ -86,7 +86,18 @@ const BookDetailsScreen = () => {
   const [newReviewRating, setNewReviewRating] = useState(0);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const initialBook = route.params?.book;
+  const initialBook = useMemo(() => {
+    if (!route.params?.book) return null;
+    if (typeof route.params.book === "string") {
+      try {
+        return JSON.parse(route.params.book);
+      } catch (e) {
+        return null;
+      }
+    }
+    return route.params.book;
+  }, [route.params?.book]);
+
   const listingId = route.params?.listingId || initialBook?.id;
 
   // Query listing details from backend
@@ -94,8 +105,12 @@ const BookDetailsScreen = () => {
     queryKey: ["listing", listingId],
     queryFn: async () => {
       if (!listingId) return null;
-      const response = await api.get(`/api/v1/marketplace/listings/${listingId}/`);
-      return response.data;
+      try {
+        const response = await api.get(`/api/v1/marketplace/listings/${listingId}/`);
+        return response.data;
+      } catch (err) {
+        return null;
+      }
     },
     enabled: !!listingId,
   });
@@ -451,8 +466,11 @@ const BookDetailsScreen = () => {
           {/* Authors as chips */}
           <View style={styles.chipsRow}>
             {book.authorsList?.map((a: any, idx: number) => {
+              const authorName = typeof a === "string" ? a : a?.name || "Unknown Author";
               const authorImageUrl =
-                a.image_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop";
+                (typeof a === "object" && a?.image_url)
+                  ? a.image_url
+                  : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop";
               return (
                 <View key={idx} style={styles.authorChip}>
                   <Image
@@ -461,7 +479,7 @@ const BookDetailsScreen = () => {
                     contentFit="cover"
                     cachePolicy="memory-disk"
                   />
-                  <Text style={styles.authorChipText}>{a.name}</Text>
+                  <Text style={styles.authorChipText}>{authorName}</Text>
                 </View>
               );
             })}

@@ -33,9 +33,9 @@ export interface AuthorItem {
 export const DEFAULT_AUTHORS: AuthorItem[] = [
   {
     id: "1",
-    name: "Rabindranath Thakur",
+    name: "Rabindranath Tagore",
     photoUri:
-      "https://plus.unsplash.com/premium_photo-1678337928702-3ca9cdf81122?q=80&w=402&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/1926_Rabindrath_Tagore.jpg/400px-1926_Rabindrath_Tagore.jpg",
     bio: "Nobel Prize-winning Bengali polymath who revolutionized literature, music, and cultural thought.",
     rating: 5,
   },
@@ -172,6 +172,15 @@ interface AuthorCardProps {
   onPress?: (item: AuthorItem) => void;
 }
 
+const getAuthorInitials = (name: string) => {
+  if (!name) return "A";
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
+
 const AuthorCard: React.FC<AuthorCardProps> = memo(({ item, index, scrollX, onPress }) => {
   const center = index * SNAP_INTERVAL;
   const inputRange = [center - SNAP_INTERVAL, center, center + SNAP_INTERVAL] as const;
@@ -238,16 +247,22 @@ const AuthorCard: React.FC<AuthorCardProps> = memo(({ item, index, scrollX, onPr
       {/* Fixed-width slot ── FlatList always sees this constant width */}
       <View style={styles.slot}>
         <Animated.View style={[styles.card, containerStyle]}>
-          {/* Author photo ── always visible */}
+          {/* Author photo ── real photo or initials fallback */}
           <View style={styles.photoWrap}>
-            <Image
-              source={{ uri: item.photoUri }}
-              style={styles.photo}
-              contentFit="cover"
-              recyclingKey={item.photoUri}
-              cachePolicy="memory-disk"
-              placeholderContentFit="cover"
-            />
+            {item.photoUri ? (
+              <Image
+                source={{ uri: item.photoUri }}
+                style={styles.photo}
+                contentFit="cover"
+                recyclingKey={item.photoUri}
+                cachePolicy="memory-disk"
+                placeholderContentFit="cover"
+              />
+            ) : (
+              <View style={styles.initialsWrap}>
+                <Text style={styles.initialsText}>{getAuthorInitials(item.name)}</Text>
+              </View>
+            )}
           </View>
 
           {/* Details ── staggered reveal: Name → Bio → Stars */}
@@ -460,6 +475,19 @@ const styles = StyleSheet.create({
   photo: {
     width: "100%",
     height: "100%",
+  },
+  initialsWrap: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontSize: rem(1.25),
+    fontFamily: FONTS.montserrat.bold,
+    color: COLORS.white,
+    letterSpacing: 1,
   },
 
   // ── Details column ──

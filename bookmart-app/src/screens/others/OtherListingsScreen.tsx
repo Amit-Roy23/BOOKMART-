@@ -5,7 +5,7 @@ import { Book } from "@/data/models";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useNavigation, useRoute } from "expo-router";
+import { router, useNavigation, useRoute } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -23,7 +23,14 @@ const OtherListingsScreen = () => {
         style={styles.card}
         activeOpacity={0.9}
         onPress={() => {
-          navigation.navigate("BookDetails", { book: item });
+          router.push({
+            pathname: "/(screens)/BookDetails",
+            params: {
+              listingId: item.id,
+              book: JSON.stringify(item),
+              categoryTitle: "Other Listings",
+            },
+          });
         }}
       >
         <Image source={{ uri: item.coverUri }} style={styles.bookImage} contentFit="fill" />

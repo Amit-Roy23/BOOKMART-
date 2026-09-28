@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { StyleSheet, View, FlatList, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from "@gorhom/bottom-sheet";
@@ -173,7 +173,12 @@ const SearchScreen = () => {
     return (
       <TouchableOpacity
         style={styles.bookCard}
-        onPress={() => navigation.navigate("AppStack", { screen: "BookDetails", params: { listingId: item.id } })}
+        onPress={() =>
+          router.push({
+            pathname: "/(screens)/BookDetails",
+            params: { listingId: item.id, categoryTitle: "Search Results" },
+          })
+        }
         activeOpacity={0.8}
       >
         <Image source={{ uri: coverUri }} style={styles.bookCover} contentFit="cover" />

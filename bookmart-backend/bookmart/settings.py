@@ -478,4 +478,8 @@ if "test" in sys.argv or "test_coverage" in sys.argv:
         }
     }
 
+# Pluggable Payment Gateway Configuration ("dummy" or custom gateway import path)
+PAYMENT_GATEWAY = os.getenv("PAYMENT_GATEWAY", "dummy")
+
+
 

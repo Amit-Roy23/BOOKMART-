@@ -6,6 +6,7 @@ import ExcellentCondition from "@/components/smallComp/ExcellentCondition";
 import PeopleViewing from "@/components/smallComp/PeopleViewing";
 import RecentlyAdded from "@/components/smallComp/RecentlyAdded";
 import SponsoredSection from "@/components/smallComp/SponsoredSection";
+import AuthorsSection, { AuthorItem } from "@/components/ui/AuthorsSection";
 import GenreSection from "@/components/ui/GenreSection";
 import HomeHeader from "@/components/ui/HomeHeader";
 import InstituteBooks from "@/components/ui/InstituteBooks";
@@ -54,6 +55,35 @@ const HomeScreen = () => {
     },
   });
 
+  const { data: authorsData } = useQuery({
+    queryKey: ["authors"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/book/authors/");
+      return response.data;
+    },
+  });
+
+  const currentUserId = userProfile?.user_id;
+  const currentUserEmail = userProfile?.email;
+
+  const isOwnListing = useCallback(
+    (item: any) => {
+      if (!item) return false;
+      const sellerId = item.seller?.id ?? item.seller_id;
+      const sellerEmail = item.seller?.email;
+      if (currentUserId && sellerId === currentUserId) return true;
+      if (currentUserEmail && sellerEmail && sellerEmail.toLowerCase() === currentUserEmail.toLowerCase()) return true;
+      return false;
+    },
+    [currentUserId, currentUserEmail]
+  );
+
+  // Filter out the user's own listings from the Home screen feeds
+  const otherListings = useMemo(() => {
+    if (!listingsData?.results) return [];
+    return listingsData.results.filter((item: any) => !isOwnListing(item));
+  }, [listingsData, isOwnListing]);
+
   // ── Mappers ──
   const mapListingToBook = useCallback(
     (item: any) => ({
@@ -78,75 +108,109 @@ const HomeScreen = () => {
   );
 
   const sponsoredBooks = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return listingsData.results.filter((item: any) => item.is_boosted).map(mapListingToBook);
-  }, [listingsData, mapListingToBook]);
+    if (!otherListings) return [];
+    return otherListings.filter((item: any) => item.is_boosted).map(mapListingToBook);
+  }, [otherListings, mapListingToBook]);
 
   const nearestBooks = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return listingsData.results.slice(0, 6).map(mapListingToBook);
-  }, [listingsData, mapListingToBook]);
+    if (!otherListings) return [];
+    return otherListings.slice(0, 6).map(mapListingToBook);
+  }, [otherListings, mapListingToBook]);
 
   const collegeBooks = useMemo(() => {
-    if (!listingsData?.results) return [];
+    if (!otherListings) return [];
     const collegeId = userProfile?.college?.id;
-    const filtered = listingsData.results.filter(
-      (item: any) =>
-        item.seller.id !== userProfile?.user?.id && (!collegeId || item.seller.profile?.college?.id === collegeId)
+    const filtered = otherListings.filter(
+      (item: any) => !collegeId || item.seller?.profile?.college?.id === collegeId
     );
-    return (filtered.length > 0 ? filtered : listingsData.results).slice(0, 6).map(mapListingToBook);
-  }, [listingsData, userProfile, mapListingToBook]);
+    return (filtered.length > 0 ? filtered : otherListings).slice(0, 6).map(mapListingToBook);
+  }, [otherListings, userProfile, mapListingToBook]);
 
   const recentlyAdded = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return [...listingsData.results]
+    if (!otherListings) return [];
+    return [...otherListings]
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 6)
       .map(mapListingToBook);
-  }, [listingsData, mapListingToBook]);
+  }, [otherListings, mapListingToBook]);
 
   const excellentCondition = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return listingsData.results
+    if (!otherListings) return [];
+    return otherListings
       .filter((item: any) => item.condition === "NEW" || item.condition === "LIKE_NEW")
       .slice(0, 6)
       .map(mapListingToBook);
-  }, [listingsData, mapListingToBook]);
+  }, [otherListings, mapListingToBook]);
 
   const peopleViewing = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return [...listingsData.results]
+    if (!otherListings) return [];
+    return [...otherListings]
       .sort((a: any, b: any) => (b.views_count || 0) - (a.views_count || 0))
       .slice(0, 5)
       .map(mapListingToBook);
-  }, [listingsData, mapListingToBook]);
+  }, [otherListings, mapListingToBook]);
 
   const endingSoon = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return listingsData.results.slice(0, 5).map((item: any) => ({
+    if (!otherListings) return [];
+    return otherListings.slice(0, 5).map((item: any) => ({
       ...mapListingToBook(item),
       timeLeft: "12h left",
     }));
-  }, [listingsData, mapListingToBook]);
+  }, [otherListings, mapListingToBook]);
 
   const editorsChoice = useMemo(() => {
-    if (!recommendationsData?.results) return null;
-    if (recommendationsData.results.length === 0) return null;
-    const item = recommendationsData.results[0];
-    const activeListing = item.ranked_listings?.[0] || item.listings?.[0];
-    return {
-      id: String(activeListing?.id || item.id),
-      title: item.title,
-      author: item.authors?.map((a: any) => a.name).join(", ") || "Unknown Author",
-      price: activeListing ? parseFloat(activeListing.price) : 250,
-      coverUri:
-        activeListing?.listing_images?.[0]?.image_url ||
-        item.cover_url ||
-        "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
-      condition: activeListing?.condition || "Good",
-      distance: "2km",
-    };
-  }, [recommendationsData]);
+    if (!recommendationsData?.results || recommendationsData.results.length === 0) return null;
+    for (const item of recommendationsData.results) {
+      const allListings = item.ranked_listings || item.listings || [];
+      const validListing = allListings.find((l: any) => !isOwnListing(l));
+      if (validListing) {
+        return {
+          id: String(validListing.id),
+          title: item.title,
+          author: item.authors?.map((a: any) => a.name).join(", ") || "Unknown Author",
+          price: parseFloat(validListing.price) || 250,
+          coverUri:
+            validListing?.listing_images?.[0]?.image_url ||
+            item.cover_url ||
+            "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
+          condition: validListing?.condition || "Good",
+          distance: "2km",
+        };
+      }
+    }
+    return null;
+  }, [recommendationsData, isOwnListing]);
+
+  const authors = useMemo(() => {
+    if (!authorsData?.results || !otherListings) return [];
+
+    // Collect all author IDs and author names present in listings from OTHER sellers
+    const activeAuthorIds = new Set<string>();
+    const activeAuthorNames = new Set<string>();
+
+    for (const item of otherListings) {
+      if (item.book?.authors && Array.isArray(item.book.authors)) {
+        for (const a of item.book.authors) {
+          if (a.id) activeAuthorIds.add(String(a.id));
+          if (a.name) activeAuthorNames.add(a.name.toLowerCase().trim());
+        }
+      }
+    }
+
+    return authorsData.results
+      .filter((item: any) => {
+        const idMatch = activeAuthorIds.has(String(item.id));
+        const nameMatch = item.name ? activeAuthorNames.has(item.name.toLowerCase().trim()) : false;
+        return idMatch || nameMatch;
+      })
+      .map((item: any) => ({
+        id: String(item.id),
+        name: item.name,
+        photoUri: item.image_url || "",
+        bio: item.bio || "",
+        rating: parseFloat(item.rating) || 5,
+      }));
+  }, [authorsData, otherListings]);
 
   const handleNotificationPress = useCallback(() => {
     router.push("/(screens)/Notifications");
@@ -180,6 +244,17 @@ const HomeScreen = () => {
 
   const handleInstituteSeeAllPress = useCallback(() => {
     router.push("/(screens)/CollegeInsights");
+  }, []);
+
+  const handleAuthorPress = useCallback((author: AuthorItem) => {
+    router.push({
+      pathname: "/(screens)/AuthorDetails",
+      params: { author: JSON.stringify(author) },
+    });
+  }, []);
+
+  const handleAuthorSeeAllPress = useCallback(() => {
+    router.push("/(screens)/AuthorList");
   }, []);
 
   if (isLoadingListings) {
@@ -221,6 +296,15 @@ const HomeScreen = () => {
         {/* ── Nearest Books ── */}
         {nearestBooks.length > 0 && (
           <NearestBooks books={nearestBooks} onBookPress={handleBookPress} onSeeAllPress={handleSeeAllPress} />
+        )}
+
+        {/* ── Authors (Shown only when authors have listed books) ── */}
+        {authors.length > 0 && (
+          <AuthorsSection
+            authors={authors}
+            onAuthorPress={handleAuthorPress}
+            onSeeAllPress={handleAuthorSeeAllPress}
+          />
         )}
 
         {/* ── Recently Added ── */}

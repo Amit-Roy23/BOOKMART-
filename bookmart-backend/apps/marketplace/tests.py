@@ -4,7 +4,15 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.books.models import Author, Book
-from apps.marketplace.models import BookListing, BookListingImage, Wishlist, PlatformNotification, BookContactLedger
+from apps.marketplace.models import (
+    BookListing,
+    BookListingImage,
+    Wishlist,
+    PlatformNotification,
+    BookContactLedger,
+    BoostPlan,
+    BoostOrder,
+)
 
 User = get_user_model()
 
@@ -589,5 +597,180 @@ class WishlistAndNotificationTests(APITestCase):
         self.assertEqual(BookContactLedger.objects.count(), 1)
         # Assert signal resolved the seller listing and created a PlatformNotification for them
         self.assertEqual(PlatformNotification.objects.filter(user=self.seller, notification_type="BUYER_INTEREST").count(), 1)
+
+
+class BoostPaymentTests(APITestCase):
+
+    def setUp(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self.timedelta = timedelta
+        self.timezone = timezone
+
+        self.seller = User.objects.create_user(
+            email="boost_seller@example.com",
+            full_name="Boost Seller",
+            password="testpassword123",
+        )
+        self.other_user = User.objects.create_user(
+            email="boost_other@example.com",
+            full_name="Other User",
+            password="testpassword123",
+        )
+        self.book = Book.objects.create(title="Mastering React Native")
+        self.listing = BookListing.objects.create(
+            book=self.book,
+            seller=self.seller,
+            price=399.00,
+            condition="GOOD",
+            status="AVAILABLE",
+            is_boosted=False,
+        )
+        self.plan_3d = BoostPlan.objects.create(
+            name="3 Days Boost",
+            duration_days=3,
+            price=49.00,
+            is_active=True,
+        )
+        self.plan_inactive = BoostPlan.objects.create(
+            name="Expired Plan",
+            duration_days=5,
+            price=69.00,
+            is_active=False,
+        )
+
+    def test_list_boost_plans(self):
+        """Ensure GET /api/v1/marketplace/boost-plans/ only returns active plans."""
+        url = "/api/v1/marketplace/boost-plans/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        plan_names = [p["name"] for p in response.data]
+        self.assertIn("3 Days Boost", plan_names)
+        self.assertNotIn("Expired Plan", plan_names)
+
+    def test_initiate_boost_order_success(self):
+        """Ensure listing owner can initiate a PENDING boost order."""
+        self.client.force_authenticate(user=self.seller)
+        url = f"/api/v1/marketplace/listings/{self.listing.id}/boost/initiate/"
+        data = {
+            "plan_id": self.plan_3d.id,
+            "payment_method": "UPI",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("order_id", response.data)
+        self.assertIn("payment_session", response.data)
+        self.assertEqual(response.data["payment_session"]["gateway"], "dummy")
+        self.assertEqual(response.data["payment_session"]["status"], "INITIATED")
+
+        order = BoostOrder.objects.get(id=response.data["order_id"])
+        self.assertEqual(order.status, BoostOrder.Status.PENDING)
+        self.assertEqual(order.amount, self.plan_3d.price)
+        self.assertEqual(order.user, self.seller)
+        self.assertEqual(order.listing, self.listing)
+
+    def test_initiate_boost_order_unauthorized(self):
+        """Ensure a non-owner cannot initiate a boost order for another seller's listing."""
+        self.client.force_authenticate(user=self.other_user)
+        url = f"/api/v1/marketplace/listings/{self.listing.id}/boost/initiate/"
+        data = {"plan_id": self.plan_3d.id}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_initiate_boost_order_already_boosted(self):
+        """Ensure already boosted listing rejects duplicate boost initiation."""
+        self.listing.is_boosted = True
+        self.listing.boost_expires_at = self.timezone.now() + self.timedelta(days=2)
+        self.listing.save()
+
+        self.client.force_authenticate(user=self.seller)
+        url = f"/api/v1/marketplace/listings/{self.listing.id}/boost/initiate/"
+        data = {"plan_id": self.plan_3d.id}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already boosted", response.data["detail"].lower())
+
+    def test_confirm_boost_order_success(self):
+        """Ensure order owner can confirm payment and activate listing boost."""
+        order = BoostOrder.objects.create(
+            listing=self.listing,
+            user=self.seller,
+            plan=self.plan_3d,
+            status=BoostOrder.Status.PENDING,
+            payment_method="UPI",
+            amount=self.plan_3d.price,
+        )
+
+        self.client.force_authenticate(user=self.seller)
+        url = f"/api/v1/marketplace/boost-orders/{order.id}/confirm/"
+        data = {
+            "gateway_transaction_id": "dummy_txn_12345",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["is_boosted"])
+        self.assertIsNotNone(response.data["boost_expires_at"])
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, BoostOrder.Status.SUCCESS)
+        self.assertIsNotNone(order.paid_at)
+
+        self.listing.refresh_from_db()
+        self.assertTrue(self.listing.is_boosted)
+        self.assertIsNotNone(self.listing.boost_expires_at)
+        self.assertGreater(self.listing.boost_expires_at, self.timezone.now())
+
+    def test_confirm_boost_order_wrong_user_forbidden(self):
+        """Ensure confirming an order created by another user returns 403 Forbidden."""
+        order = BoostOrder.objects.create(
+            listing=self.listing,
+            user=self.seller,
+            plan=self.plan_3d,
+            status=BoostOrder.Status.PENDING,
+            amount=self.plan_3d.price,
+        )
+
+        self.client.force_authenticate(user=self.other_user)
+        url = f"/api/v1/marketplace/boost-orders/{order.id}/confirm/"
+        response = self.client.post(url, {"gateway_transaction_id": "dummy_txn_hacker"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, BoostOrder.Status.PENDING)
+        self.listing.refresh_from_db()
+        self.assertFalse(self.listing.is_boosted)
+
+    def test_confirm_boost_order_force_fail(self):
+        """Ensure failed payment verification marks order as FAILED and does not boost listing."""
+        order = BoostOrder.objects.create(
+            listing=self.listing,
+            user=self.seller,
+            plan=self.plan_3d,
+            status=BoostOrder.Status.PENDING,
+            amount=self.plan_3d.price,
+        )
+
+        self.client.force_authenticate(user=self.seller)
+        url = f"/api/v1/marketplace/boost-orders/{order.id}/confirm/"
+        response = self.client.post(url, {"force_fail": True})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, BoostOrder.Status.FAILED)
+        self.listing.refresh_from_db()
+        self.assertFalse(self.listing.is_boosted)
+
+    def test_boost_expiry_filter(self):
+        """Ensure serializer computes is_boosted=False when boost_expires_at is in the past."""
+        self.listing.is_boosted = True
+        self.listing.boost_expires_at = self.timezone.now() - self.timedelta(days=1)
+        self.listing.save()
+
+        self.client.force_authenticate(user=self.seller)
+        url = f"/api/v1/marketplace/listings/{self.listing.id}/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["is_boosted"])
+
 
 

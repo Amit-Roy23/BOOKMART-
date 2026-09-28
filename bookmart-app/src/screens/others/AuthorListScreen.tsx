@@ -3,7 +3,7 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { Image } from "expo-image";
 import React, { useCallback, useMemo, useState } from "react";
 import { Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -23,6 +23,15 @@ interface Author {
   category?: string;
   [key: string]: any;
 }
+
+const getAuthorInitials = (name: string) => {
+  if (!name) return "A";
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
 
 const AuthorListScreen = () => {
   const insets = useSafeAreaInsets();
@@ -46,10 +55,10 @@ const AuthorListScreen = () => {
     return authorsData.results.map((item: any) => ({
       id: String(item.id),
       name: item.name,
-      imageUri: item.image_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
+      imageUri: item.image_url || "",
       bio: item.bio || "",
       category: item.designation || "Author",
-      rating: parseFloat(item.rating) || 4.5,
+      rating: parseFloat(item.rating) || 4.8,
     }));
   }, [authorsData]);
 
@@ -69,12 +78,12 @@ const AuthorListScreen = () => {
     return authors.filter((author: any) => author.category === activeCategory);
   }, [activeCategory, authors]);
 
-  const handleAuthorPress = useCallback(
-    (author: any) => {
-      navigation.navigate("AppStack", { screen: "AuthorDetails", params: { author: JSON.stringify(author) } });
-    },
-    [navigation]
-  );
+  const handleAuthorPress = useCallback((author: any) => {
+    router.push({
+      pathname: "/(screens)/AuthorDetails",
+      params: { author: JSON.stringify(author) },
+    });
+  }, []);
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -118,7 +127,13 @@ const AuthorListScreen = () => {
   const renderAuthorItem = useCallback(
     ({ item }: { item: Author }) => (
       <TouchableOpacity style={styles.authorCard} onPress={() => handleAuthorPress(item)}>
-        <Image source={{ uri: item.imageUri }} style={styles.authorImage} contentFit="fill" cachePolicy="memory-disk" />
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.authorImage} contentFit="fill" cachePolicy="memory-disk" />
+        ) : (
+          <View style={[styles.authorImage, styles.initialsAvatar]}>
+            <Text style={styles.initialsText}>{getAuthorInitials(item.name)}</Text>
+          </View>
+        )}
         <View style={styles.authorInfo}>
           <Text style={styles.authorName} numberOfLines={1}>
             {item.name}
@@ -234,6 +249,17 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     marginRight: SPACING.md,
     backgroundColor: COLORS.grayLight,
+  },
+  initialsAvatar: {
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontSize: rem(1.25),
+    fontFamily: FONTS.montserrat.bold,
+    color: COLORS.white,
+    letterSpacing: 0.5,
   },
   authorInfo: {
     flex: 1,

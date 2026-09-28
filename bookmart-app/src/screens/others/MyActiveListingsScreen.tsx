@@ -5,7 +5,7 @@ import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -210,7 +210,7 @@ export default function MyActiveListingsScreen() {
           <TouchableOpacity
             style={styles.actionBtn}
             activeOpacity={0.7}
-            onPress={() => navigation.navigate("AppStack", { screen: "Create", params: { editListingId: item.id } })}
+            onPress={() => router.push({ pathname: "/(tabs)/create", params: { editListingId: item.id } } as any)}
           >
             <Feather name="edit-2" size={14} color={COLORS.primary} />
             <Text style={styles.actionBtnText}>Edit</Text>
@@ -259,7 +259,7 @@ export default function MyActiveListingsScreen() {
         </View>
         <Text style={styles.promoDesc}>Get 3x more visibility and reach more buyers.</Text>
       </View>
-      <TouchableOpacity style={styles.boostBtn} activeOpacity={0.8} onPress={() => navigation.navigate("BoostListing")}>
+      <TouchableOpacity style={styles.boostBtn} activeOpacity={0.8} onPress={() => router.push("/(screens)/BoostListing")}>
         <Text style={styles.boostBtnText}>Boost Now</Text>
       </TouchableOpacity>
     </View>
@@ -293,7 +293,7 @@ export default function MyActiveListingsScreen() {
         <TouchableOpacity
           style={styles.fab}
           activeOpacity={0.9}
-          onPress={() => navigation.navigate("AppStack", { screen: "Create" })}
+          onPress={() => router.push("/(tabs)/create")}
         >
           <FontAwesome name="book" size={24} color={COLORS.white} />
         </TouchableOpacity>

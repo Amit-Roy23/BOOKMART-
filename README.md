@@ -62,9 +62,8 @@ docker compose up -d --build
 ```
 
 ### 3. Verify Running Services
-- **Web App**: [http://localhost:3000](http://localhost:3000) or [http://192.168.1.102:3000](http://192.168.1.102:3000)
-- **Backend API Root**: [http://localhost:8000/api/v1/](http://localhost:8000/api/v1/)
-- **API Swagger Documentation**: [http://localhost:8000/api/schema/swagger-ui/](http://localhost:8000/api/schema/swagger-ui/)
+- **API Swagger Documentation**: [http://localhost:8000/docs/swagger/](http://localhost:8000/docs/swagger/) (or [http://localhost:8000/api/schema/swagger-ui/](http://localhost:8000/api/schema/swagger-ui/))
+- **API Redoc Documentation**: [http://localhost:8000/docs/redoc/](http://localhost:8000/docs/redoc/)
 
 ---
 
@@ -174,7 +173,7 @@ If you switch Wi-Fi networks (e.g., home router, office, coffee shop), your comp
 
 - **Phone Cannot Reach Backend**:
   1. Ensure both your computer and phone are connected to the exact same Wi-Fi network (check that client isolation is not enabled on your router).
-  2. Ensure Windows Defender Firewall allows incoming connections on port 8000. To test, open `http://192.168.1.102:8000/api/schema/swagger-ui/` in your phone's mobile browser.
+  2. Ensure Windows Defender Firewall allows incoming connections on port 8000. To test, open `http://192.168.1.102:8000/docs/swagger/` in your phone's mobile browser.
   3. Clear Metro bundler cache if env changes are not picking up: `npx expo start -c`.
 
 - **Standalone Backend Mode**:

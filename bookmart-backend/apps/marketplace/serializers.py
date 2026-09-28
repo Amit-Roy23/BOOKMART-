@@ -1,9 +1,18 @@
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.books.models import Author, Book
-from apps.marketplace.models import BookListing, BookListingImage, Wishlist, PlatformNotification, BookContactLedger
+from apps.marketplace.models import (
+    BookListing,
+    BookListingImage,
+    Wishlist,
+    PlatformNotification,
+    BookContactLedger,
+    BoostPlan,
+    BoostOrder,
+)
 
 User = get_user_model()
 
@@ -88,6 +97,8 @@ class BookListingResponseSerializer(serializers.ModelSerializer):
     listing_images = BookListingImageSerializer(many=True, read_only=True)
     favorite_count = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
+    is_boosted = serializers.SerializerMethodField()
+    boost_expires_at = serializers.DateTimeField(read_only=True)
     tags = serializers.SerializerMethodField()
 
     class Meta:
@@ -106,6 +117,7 @@ class BookListingResponseSerializer(serializers.ModelSerializer):
             "favorite_count",
             "is_favorited",
             "is_boosted",
+            "boost_expires_at",
             "views_count",
             "tags",
             "created_at",
@@ -126,6 +138,14 @@ class BookListingResponseSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return Wishlist.objects.filter(user=request.user, listing=obj).exists()
         return False
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_is_boosted(self, obj):
+        if not obj.is_boosted:
+            return False
+        if obj.boost_expires_at and obj.boost_expires_at <= timezone.now():
+            return False
+        return True
 
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_tags(self, obj):
@@ -359,4 +379,58 @@ class BookContactLedgerSerializer(serializers.ModelSerializer):
             "deal_type",
             "price_recorded",
             "transaction_date",
+        ]
+
+
+class BoostPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BoostPlan
+        fields = ["id", "name", "duration_days", "price", "is_active"]
+
+
+class BoostOrderInitiateSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the active BoostPlan to purchase."
+    )
+    payment_method = serializers.CharField(
+        required=False,
+        default="UPI",
+        max_length=50,
+        help_text="Selected payment method (e.g., 'UPI', 'CARD', 'WALLET')."
+    )
+
+
+class BoostOrderConfirmSerializer(serializers.Serializer):
+    gateway_transaction_id = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+        help_text="Transaction ID or payment reference returned by the gateway."
+    )
+    force_fail = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Simulation flag to test gateway payment failure."
+    )
+
+
+class BoostOrderResponseSerializer(serializers.ModelSerializer):
+    plan = BoostPlanSerializer(read_only=True)
+    listing_id = serializers.IntegerField(source="listing.id", read_only=True)
+    listing_title = serializers.CharField(source="listing.book.title", read_only=True)
+
+    class Meta:
+        model = BoostOrder
+        fields = [
+            "id",
+            "listing_id",
+            "listing_title",
+            "plan",
+            "status",
+            "payment_method",
+            "gateway_transaction_id",
+            "amount",
+            "created_at",
+            "paid_at",
         ]

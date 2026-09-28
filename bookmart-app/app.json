@@ -39,7 +39,6 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-maps",
       [
         "expo-location",
         {
