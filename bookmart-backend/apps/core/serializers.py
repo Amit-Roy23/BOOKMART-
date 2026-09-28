@@ -37,19 +37,23 @@ class ProfileResponseSerializer(serializers.ModelSerializer):
 
     def get_profile_views(self, obj):
         from django.db.models import Sum
-        from apps.marketplace.models import ListingAnalyticsDaily
-        views = ListingAnalyticsDaily.objects.filter(
-            listing__seller=obj.user
+        from apps.marketplace.models import BookListing
+        views = BookListing.objects.filter(
+            seller=obj.user
         ).aggregate(total=Sum("views_count"))["total"]
         return views or 0
 
     def get_whatsapp_contacts(self, obj):
         from django.db.models import Sum
-        from apps.marketplace.models import ListingAnalyticsDaily
-        contacts = ListingAnalyticsDaily.objects.filter(
-            listing__seller=obj.user
-        ).aggregate(total=Sum("wa_contacts_count"))["total"]
-        return contacts or 0
+        from apps.marketplace.models import BookContactLedger, ListingAnalyticsDaily
+        ledger_count = BookContactLedger.objects.filter(user=obj.user).count()
+        analytics_contacts = (
+            ListingAnalyticsDaily.objects.filter(
+                listing__seller=obj.user
+            ).aggregate(total=Sum("wa_contacts_count"))["total"]
+            or 0
+        )
+        return max(ledger_count, analytics_contacts)
 
     def get_active_listings_count(self, obj):
         from apps.marketplace.models import BookListing

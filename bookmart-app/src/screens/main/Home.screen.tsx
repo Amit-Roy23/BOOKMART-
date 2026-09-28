@@ -327,6 +327,8 @@ const HomeScreen = () => {
       {/* ── Header ── */}
       <HomeHeader
         locationName={userProfile?.city_location || "Campus Area"}
+        avatarUri={userProfile?.image}
+        fullName={userProfile?.full_name}
         notificationCount={3}
         onNotificationPress={handleNotificationPress}
         onAvatarPress={handleAvatarPress}

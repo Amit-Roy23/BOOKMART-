@@ -172,7 +172,10 @@ const EditProfileScreen: React.FC = () => {
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      if (data) {
+        queryClient.setQueryData(["userProfile"], data);
+      }
       queryClient.invalidateQueries({ queryKey: ["userProfile"] });
       showToastOrAlert("Profile updated successfully");
       navigation.goBack();
