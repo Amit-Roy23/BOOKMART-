@@ -7,7 +7,7 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -273,6 +273,7 @@ const CreateScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const queryClient = useQueryClient();
   const editListingId = route.params?.editListingId || route.params?.listingId || route.params?.id;
 
   // ── State ──
@@ -289,14 +290,12 @@ const CreateScreen = () => {
   const [images, setImages] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [uploadProgress, setUploadProgress] = useState<number[]>([0, 0, 0, 0, 0, 0]);
   const [bookId, setBookId] = useState<number | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [debouncedTitle, setDebouncedTitle] = useState("");
-  const [loadingSuggestionKey, setLoadingSuggestionKey] = useState<string | null>(null);
 
   // Step 2 – Condition & Price
   const [condition, setCondition] = useState("good");
   const [notes, setNotes] = useState("");
   const [price, setPrice] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   // Step 3 – Description & Location
   const [description, setDescription] = useState("");
@@ -386,22 +385,7 @@ const CreateScreen = () => {
     }
   }, [editListingData, userProfile]);
 
-  // ── Debounced Book Title Search ──
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedTitle(title), 500);
-    return () => clearTimeout(handler);
-  }, [title]);
 
-  const { data: searchSuggestions = [], isLoading: isLoadingSuggestions } = useQuery({
-    queryKey: ["bookSearch", debouncedTitle],
-    queryFn: async () => {
-      const response = await api.get("/api/v1/book/search/", {
-        params: { q: debouncedTitle },
-      });
-      return response.data || [];
-    },
-    enabled: showSuggestions && debouncedTitle.trim().length >= 2,
-  });
 
 const normalizeCategory = (catStr: string | null | undefined): string => {
   if (!catStr) return "Others";
@@ -441,87 +425,7 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
     );
   }, [categoryInput, categoryOptions]);
 
-  // ── Import & Manual Create Mutations ──
-  const importMutation = useMutation({
-    mutationFn: async ({ openlibraryKey, categoryVal }: { openlibraryKey: string; categoryVal: string | null }) => {
-      const response = await api.post("/api/v1/book/import-openlibrary/", {
-        openlibrary_key: openlibraryKey,
-        genre: categoryVal,
-        category: categoryVal,
-      });
-      return response.data;
-    },
-    onSuccess: (importedBook) => {
-      setTitle(importedBook.title || "");
-      setAuthor(importedBook.authors?.join(", ") || "");
-      setBookId(importedBook.book_id || null);
-      const responseGenres = importedBook.genres || [];
-      if (responseGenres.length > 0) {
-        const normCat = normalizeCategory(responseGenres[0]);
-        setCategoryInput(normCat);
-        setCategory(normCat);
-      }
-      setLoadingSuggestionKey(null);
-      setShowSuggestions(false);
-      showToast("Book imported successfully");
-    },
-    onError: (err: any) => {
-      showToast(err.response?.data?.detail || "Failed to import book.");
-      setLoadingSuggestionKey(null);
-    },
-  });
 
-  const manualCreateMutation = useMutation({
-    mutationFn: async ({ titleVal, authorVal }: { titleVal: string; authorVal: string }) => {
-      const response = await api.post("/api/v1/book/manual/", {
-        title: titleVal,
-        author: authorVal,
-      });
-      return response.data;
-    },
-    onSuccess: (manualBook) => {
-      setTitle(manualBook.title || "");
-      setAuthor(manualBook.authors?.join(", ") || "");
-      setBookId(manualBook.book_id || null);
-      const responseGenres = manualBook.genres || [];
-      if (responseGenres.length > 0) {
-        const normCat = normalizeCategory(responseGenres[0]);
-        setCategoryInput(normCat);
-        setCategory(normCat);
-      }
-      setLoadingSuggestionKey(null);
-      setShowSuggestions(false);
-      showToast("Manual book entry created");
-    },
-    onError: (err: any) => {
-      showToast(err.response?.data?.detail || "Failed to create manual book.");
-      setLoadingSuggestionKey(null);
-    },
-  });
-
-  const handleSelectSuggestion = (suggestion: any) => {
-    if (suggestion.is_local && suggestion.id) {
-      setShowSuggestions(false);
-      setTitle(suggestion.title || "");
-      setAuthor(suggestion.authors?.join(", ") || "");
-      setBookId(suggestion.id);
-      const responseGenres = suggestion.genres || [];
-      if (responseGenres.length > 0) {
-        const normCat = normalizeCategory(responseGenres[0]);
-        setCategoryInput(normCat);
-        setCategory(normCat);
-      }
-      showToast("Selected local book record");
-    } else {
-      setLoadingSuggestionKey(suggestion.openlibrary_key);
-      importMutation.mutate({ openlibraryKey: suggestion.openlibrary_key, categoryVal: null });
-    }
-  };
-
-  const handleManualInsert = () => {
-    setLoadingSuggestionKey("manual");
-    manualCreateMutation.mutate({ titleVal: title, authorVal: author || "Unknown" });
-  };
 
   // ── Image Handlers ──
   const handleImagePick = (index: number) => {
@@ -821,6 +725,13 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
       showToast("Please enter a valid price");
       return;
     }
+    if (!userProfile?.phone_number) {
+      const clean = phoneNumber.replace(/[^0-9]/g, "");
+      if (clean.length < 10) {
+        showToast("Please enter a valid 10-digit WhatsApp phone number");
+        return;
+      }
+    }
     if (!location) {
       getCurrentLocation(false);
     }
@@ -835,7 +746,11 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
       });
       return response.data;
     },
-    onSuccess: () => setShowSuccess(true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["all-listings"] });
+      setShowSuccess(true);
+    },
     onError: (err: any) => showToast(err.response?.data?.detail || "Failed to list book."),
   });
 
@@ -846,7 +761,11 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
       });
       return response.data;
     },
-    onSuccess: () => setShowSuccess(true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["all-listings"] });
+      setShowSuccess(true);
+    },
     onError: (err: any) => showToast(err.response?.data?.detail || "Failed to update book."),
   });
 
@@ -856,6 +775,7 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
     setCondition("good");
     setNotes("");
     setPrice("");
+    setPhoneNumber("");
     setCategory("");
     setCategoryInput("");
     setDescription("");
@@ -886,6 +806,15 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
         formData.append("genre", categoryInput);
         formData.append("category", categoryInput);
       }
+    }
+
+    const finalPhone = userProfile?.phone_number || phoneNumber.trim();
+    if (finalPhone) {
+      let formattedPhone = finalPhone;
+      if (!formattedPhone.startsWith("+91")) {
+        formattedPhone = "+91" + formattedPhone.replace(/^(0|91|\+91)/, "");
+      }
+      formData.append("phone_number", formattedPhone);
     }
 
     const appendImageFile = (key: string, uri: string) => {
@@ -923,7 +852,6 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={!showSuggestions}
       >
         {/* ─── Step 1: Book Info ────────────────────────────────────── */}
         {currentStep === 1 && (
@@ -993,96 +921,24 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
             </View>
 
             {/* Basic Info */}
-            <View style={[styles.sectionCard, showSuggestions && { zIndex: 10 }]}>
+            <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
                 <Text style={styles.sectionTitle}>Book Details</Text>
               </View>
 
-              {/* Title with autocomplete */}
-              <View style={[styles.fieldGroup, showSuggestions && { zIndex: 10 }]}>
+              {/* Title */}
+              <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>
                   Book Title <Text style={styles.asterisk}>*</Text>
                 </Text>
                 <Input
-                  placeholder="Search or type book title"
+                  placeholder="e.g. The Great Gatsby"
                   value={title}
-                  onChangeText={(text) => {
-                    setTitle(text);
-                    setShowSuggestions(true);
-                  }}
+                  onChangeText={setTitle}
                   autoCapitalize="words"
                   containerStyle={{ marginVertical: 0 }}
                 />
-                {showSuggestions && title.trim().length >= 2 && (
-                  <View style={styles.suggestionsContainer}>
-                    {isLoadingSuggestions ? (
-                      <View style={styles.suggestionsLoading}>
-                        <ActivityIndicator size="small" color={COLORS.primary} />
-                        <Text style={styles.suggestionsLoadingText}>Searching…</Text>
-                      </View>
-                    ) : (
-                      <ScrollView
-                        style={{ maxHeight: rem(12) }}
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled
-                      >
-                        {searchSuggestions.map((item: any, idx: number) => {
-                          const isThisLoading =
-                            loadingSuggestionKey === item.openlibrary_key ||
-                            (item.is_local && loadingSuggestionKey === String(item.id));
-                          return (
-                            <TouchableOpacity
-                              key={item.id || item.openlibrary_key || idx}
-                              style={styles.suggestionItem}
-                              onPress={() => handleSelectSuggestion(item)}
-                              disabled={loadingSuggestionKey !== null}
-                            >
-                              <Image
-                                source={{
-                                  uri:
-                                    item.cover_url ||
-                                    "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=120&auto=format&fit=crop",
-                                }}
-                                style={styles.suggestionCover}
-                                contentFit="cover"
-                              />
-                              <View style={{ flex: 1, marginLeft: 10 }}>
-                                <Text style={styles.suggestionTitle} numberOfLines={1}>
-                                  {item.title}
-                                </Text>
-                                <Text style={styles.suggestionAuthor} numberOfLines={1}>
-                                  by {item.authors?.join(", ") || "Unknown"}
-                                </Text>
-                              </View>
-                              {isThisLoading && <ActivityIndicator size="small" color={COLORS.primary} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                        {/* Manual insert */}
-                        <TouchableOpacity
-                          style={[styles.suggestionItem, { borderTopWidth: 1, borderTopColor: COLORS.grayLight }]}
-                          onPress={handleManualInsert}
-                          disabled={loadingSuggestionKey !== null}
-                        >
-                          <View style={styles.manualIconWrap}>
-                            {loadingSuggestionKey === "manual" ? (
-                              <ActivityIndicator size="small" color={COLORS.blue} />
-                            ) : (
-                              <Ionicons name="create-outline" size={18} color={COLORS.blue} />
-                            )}
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <Text style={[styles.suggestionTitle, { color: COLORS.blue }]} numberOfLines={1}>
-                              Add "{title}" manually
-                            </Text>
-                            <Text style={styles.suggestionAuthor}>Not found? Insert details manually.</Text>
-                          </View>
-                        </TouchableOpacity>
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
               </View>
 
               {/* Author */}
@@ -1224,6 +1080,45 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
                   }
                 />
               </View>
+
+              {/* WhatsApp Contact Section */}
+              {userProfile?.phone_number ? (
+                <View style={styles.savedPhonePill}>
+                  <View style={styles.savedPhoneLeft}>
+                    <View style={styles.whatsappIconBg}>
+                      <Ionicons name="logo-whatsapp" size={16} color={COLORS.white} />
+                    </View>
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={styles.savedPhoneLabel}>WhatsApp Contact (Saved)</Text>
+                      <Text style={styles.savedPhoneValue}>{userProfile.phone_number}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.green} />
+                </View>
+              ) : (
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>
+                    WhatsApp Number <Text style={styles.asterisk}>*</Text>
+                  </Text>
+                  <Input
+                    placeholder="10-digit mobile number"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                    maxLength={13}
+                    containerStyle={{ marginVertical: 0 }}
+                    prefix={
+                      <View style={styles.phonePrefixWrap}>
+                        <Ionicons name="logo-whatsapp" size={16} color={COLORS.green} />
+                        <Text style={styles.phonePrefixText}>+91</Text>
+                      </View>
+                    }
+                  />
+                  <Text style={styles.fieldHint}>
+                    Required on first listing. Saved to your profile so buyers can connect with you instantly.
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.actionRow}>
@@ -1715,69 +1610,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Suggestions / dropdown overlay
-  suggestionsContainer: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
-    marginTop: 4,
-    zIndex: 100,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    overflow: "hidden",
-  },
-  suggestionsLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: SPACING.md,
-  },
-  suggestionsLoadingText: {
-    marginLeft: 8,
-    fontSize: rem(0.8125),
-    fontFamily: FONTS.manrope.medium,
-    color: COLORS.textMuted,
-  },
-  suggestionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: COLORS.grayLight,
-  },
-  suggestionCover: {
-    width: 36,
-    height: 48,
-    borderRadius: 6,
-    backgroundColor: COLORS.grayLight,
-  },
-  suggestionTitle: {
-    fontSize: rem(0.8125),
-    fontFamily: FONTS.manrope.semibold,
-    color: COLORS.black,
-  },
-  suggestionAuthor: {
-    fontSize: rem(0.6875),
-    fontFamily: FONTS.manrope.regular,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  manualIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: COLORS.blueLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+
 
   // Condition grid
   conditionGrid: {
@@ -1825,6 +1658,59 @@ const styles = StyleSheet.create({
     fontSize: rem(0.9375),
     fontFamily: FONTS.montserrat.bold,
     color: COLORS.primary,
+  },
+  savedPhonePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+    borderRadius: 14,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    marginTop: SPACING.sm,
+  },
+  savedPhoneLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  whatsappIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  savedPhoneLabel: {
+    fontSize: rem(0.6875),
+    fontFamily: FONTS.manrope.medium,
+    color: COLORS.textMuted,
+  },
+  savedPhoneValue: {
+    fontSize: rem(0.875),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
+    marginTop: 1,
+  },
+  phonePrefixWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 6,
+    gap: 4,
+  },
+  phonePrefixText: {
+    fontSize: rem(0.875),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.text,
+  },
+  fieldHint: {
+    fontSize: rem(0.6875),
+    fontFamily: FONTS.manrope.regular,
+    color: COLORS.textMuted,
+    marginTop: 4,
+    lineHeight: 15,
   },
 
   // Location

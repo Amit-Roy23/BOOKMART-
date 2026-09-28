@@ -175,6 +175,7 @@ class BookListingCreateSerializer(serializers.ModelSerializer):
     middle_page = serializers.ImageField(required=True, write_only=True)
     damage_1 = serializers.ImageField(required=False, write_only=True, allow_null=True)
     damage_2 = serializers.ImageField(required=False, write_only=True, allow_null=True)
+    phone_number = serializers.CharField(required=False, write_only=True, allow_blank=True)
 
     class Meta:
         model = BookListing
@@ -192,6 +193,7 @@ class BookListingCreateSerializer(serializers.ModelSerializer):
             "genres",
             "category",
             "categories",
+            "phone_number",
             "front_cover",
             "back_cover",
             "spine",
