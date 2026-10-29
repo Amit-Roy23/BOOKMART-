@@ -1,12 +1,19 @@
-import { Footer } from '@/components/layout/footer';
-import { Header } from '@/components/layout/header';
+'use client';
 
+import { usePathname } from 'next/navigation';
+import { TAB_ROUTES, TabBar } from '@/components/app/tab-bar';
+import { cn } from '@/lib/utils';
+
+/** App shell: like bookmart-app, the floating tab bar shows only on the four tab screens. */
 export default function MainLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const showTabs = TAB_ROUTES.includes(pathname);
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/60">
-      <Header />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-6 md:py-8">{children}</main>
-      <Footer />
+    <div className="min-h-screen bg-app-bg">
+      <main className={cn('mx-auto w-full max-w-[1100px]', showTabs ? 'pb-28' : 'pb-10')}>
+        {children}
+      </main>
+      {showTabs && <TabBar />}
     </div>
   );
 }

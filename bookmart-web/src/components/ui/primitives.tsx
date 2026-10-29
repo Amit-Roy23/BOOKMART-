@@ -1,21 +1,22 @@
 'use client';
 
 /* eslint-disable @next/next/no-img-element -- backend media comes from arbitrary hosts (local, Cloudinary, S3) */
-import { Loader2, Star } from 'lucide-react';
 import { forwardRef, useId, useState } from 'react';
-import { cn, CONDITION_STYLES, conditionLabel, FALLBACK_COVER, initials } from '@/lib/utils';
+import { IoEyeOffOutline, IoEyeOutline, IoStar, IoStarOutline } from 'react-icons/io5';
+import { cn, conditionLabel, FALLBACK_COVER, initials } from '@/lib/utils';
+
+// Styles follow bookmart-app/src/components/ui (Button, Input, Header) so both look the same.
 
 // ── Button ──────────────────────────────────────────────────
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-brand-primary text-white hover:bg-brand-dark shadow-sm',
-  secondary: 'bg-brand-light text-brand-dark hover:bg-brand-border/60',
-  outline:
-    'border border-slate-200 bg-white text-slate-700 hover:border-brand-primary hover:text-brand-primary',
-  ghost: 'text-slate-600 hover:bg-slate-100',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700',
+  primary: 'bg-primary text-white hover:brightness-95 disabled:bg-gray-heavy disabled:text-muted',
+  secondary: 'bg-secondary text-primary hover:bg-darker-teal',
+  outline: 'border border-gray-heavy bg-white text-text hover:border-primary hover:text-primary',
+  ghost: 'text-text hover:bg-secondary',
+  danger: 'bg-app-red text-white hover:brightness-95',
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -25,7 +26,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'primary', size = 'md', loading, disabled, className, children, ...props },
+  { variant = 'primary', size = 'lg', loading, disabled, className, children, ...props },
   ref
 ) {
   return (
@@ -33,16 +34,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary disabled:cursor-not-allowed disabled:opacity-60',
-        size === 'sm' && 'h-9 px-3 text-xs',
+        'font-heading inline-flex items-center justify-center gap-2 rounded-full font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed',
+        size === 'sm' && 'h-9 px-4 text-xs',
         size === 'md' && 'h-11 px-5 text-sm',
-        size === 'lg' && 'h-12 px-6 text-base',
+        size === 'lg' && 'h-14 px-6 text-base',
         BUTTON_VARIANTS[variant],
         className
       )}
       {...props}
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {loading && <Spinner className="h-4 w-4 border-2 border-current border-t-transparent" />}
       {children}
     </button>
   );
@@ -54,39 +55,77 @@ interface FieldProps {
   label?: string;
   error?: string;
   hint?: string;
+  icon?: React.ReactNode;
+  required?: boolean;
 }
+
+function FieldLabel({
+  htmlFor,
+  label,
+  required,
+}: {
+  htmlFor: string;
+  label?: string;
+  required?: boolean;
+}) {
+  if (!label) return null;
+  return (
+    <label htmlFor={htmlFor} className="font-heading mb-1 block text-sm font-semibold text-muted">
+      {label}
+      {required && <span className="text-app-red"> *</span>}
+    </label>
+  );
+}
+
+function FieldMessage({ error, hint }: { error?: string; hint?: string }) {
+  if (error) return <p className="mt-1 text-xs text-app-red">{error}</p>;
+  if (hint) return <p className="mt-1 text-xs text-muted">{hint}</p>;
+  return null;
+}
+
+const fieldBox = (error?: string) =>
+  cn(
+    'flex w-full items-center gap-3 rounded-2xl border bg-white px-4 transition focus-within:border-primary',
+    error ? 'border-app-red' : 'border-gray-heavy'
+  );
 
 export const Input = forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement> & FieldProps
->(function Input({ label, error, hint, className, id, ...props }, ref) {
+>(function Input({ label, error, hint, icon, className, id, type, required, ...props }, ref) {
   const generatedId = useId();
   const inputId = id ?? props.name ?? generatedId;
+  const [visible, setVisible] = useState(false);
+  const isPassword = type === 'password';
   return (
-    <div className="space-y-1.5">
-      {label && (
-        <label htmlFor={inputId} className="block text-sm font-semibold text-slate-700">
-          {label}
-        </label>
-      )}
-      <input
-        ref={ref}
-        id={inputId}
-        className={cn(
-          'h-11 w-full rounded-xl border bg-white px-3.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2',
-          error
-            ? 'border-rose-300 focus:border-rose-400 focus:ring-rose-100'
-            : 'border-slate-200 focus:border-brand-primary focus:ring-brand-light',
-          className
+    <div className="w-full">
+      <FieldLabel htmlFor={inputId} label={label} required={required} />
+      <div className={cn(fieldBox(error), 'h-14', props.disabled && 'bg-gray-light')}>
+        {icon && <span className="text-muted">{icon}</span>}
+        <input
+          ref={ref}
+          id={inputId}
+          type={isPassword && visible ? 'text' : type}
+          required={required}
+          aria-invalid={!!error}
+          className={cn(
+            'h-full w-full min-w-0 bg-transparent text-base font-medium text-ink placeholder:text-muted focus:outline-none disabled:text-muted',
+            className
+          )}
+          {...props}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            className="text-muted"
+            aria-label={visible ? 'Hide password' : 'Show password'}
+          >
+            {visible ? <IoEyeOutline size={20} /> : <IoEyeOffOutline size={20} />}
+          </button>
         )}
-        aria-invalid={!!error}
-        {...props}
-      />
-      {error ? (
-        <p className="text-xs text-rose-600">{error}</p>
-      ) : (
-        hint && <p className="text-xs text-slate-500">{hint}</p>
-      )}
+      </div>
+      <FieldMessage error={error} hint={hint} />
     </div>
   );
 });
@@ -94,33 +133,24 @@ export const Input = forwardRef<
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement> & FieldProps
->(function Textarea({ label, error, hint, className, id, ...props }, ref) {
+>(function Textarea({ label, error, hint, className, id, required, ...props }, ref) {
   const generatedId = useId();
   const inputId = id ?? props.name ?? generatedId;
   return (
-    <div className="space-y-1.5">
-      {label && (
-        <label htmlFor={inputId} className="block text-sm font-semibold text-slate-700">
-          {label}
-        </label>
-      )}
+    <div className="w-full">
+      <FieldLabel htmlFor={inputId} label={label} required={required} />
       <textarea
         ref={ref}
         id={inputId}
+        required={required}
         className={cn(
-          'min-h-24 w-full rounded-xl border bg-white px-3.5 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2',
-          error
-            ? 'border-rose-300 focus:ring-rose-100'
-            : 'border-slate-200 focus:border-brand-primary focus:ring-brand-light',
+          'min-h-[100px] w-full rounded-2xl border bg-white px-4 py-3 text-base font-medium text-ink placeholder:text-muted focus:border-primary focus:outline-none',
+          error ? 'border-app-red' : 'border-gray-heavy',
           className
         )}
         {...props}
       />
-      {error ? (
-        <p className="text-xs text-rose-600">{error}</p>
-      ) : (
-        hint && <p className="text-xs text-slate-500">{hint}</p>
-      )}
+      <FieldMessage error={error} hint={hint} />
     </div>
   );
 });
@@ -128,28 +158,25 @@ export const Textarea = forwardRef<
 export const Select = forwardRef<
   HTMLSelectElement,
   React.SelectHTMLAttributes<HTMLSelectElement> & FieldProps
->(function Select({ label, error, className, id, children, ...props }, ref) {
+>(function Select({ label, error, className, id, children, required, ...props }, ref) {
   const generatedId = useId();
   const inputId = id ?? props.name ?? generatedId;
   return (
-    <div className="space-y-1.5">
-      {label && (
-        <label htmlFor={inputId} className="block text-sm font-semibold text-slate-700">
-          {label}
-        </label>
-      )}
+    <div className="w-full">
+      <FieldLabel htmlFor={inputId} label={label} required={required} />
       <select
         ref={ref}
         id={inputId}
+        required={required}
         className={cn(
-          'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-light',
+          'h-14 w-full rounded-2xl border border-gray-heavy bg-white px-4 text-base font-medium text-ink focus:border-primary focus:outline-none',
           className
         )}
         {...props}
       >
         {children}
       </select>
-      {error && <p className="text-xs text-rose-600">{error}</p>}
+      <FieldMessage error={error} />
     </div>
   );
 });
@@ -157,48 +184,58 @@ export const Select = forwardRef<
 // ── Feedback ────────────────────────────────────────────────
 
 export function Spinner({ className }: { className?: string }) {
-  return <Loader2 className={cn('h-6 w-6 animate-spin text-brand-primary', className)} />;
+  return (
+    <span
+      role="status"
+      aria-label="Loading"
+      className={cn(
+        'inline-block h-7 w-7 animate-spin rounded-full border-[3px] border-primary border-t-transparent',
+        className
+      )}
+    />
+  );
 }
 
 export function PageLoader() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
-      <Spinner className="h-8 w-8" />
+      <Spinner className="h-9 w-9" />
     </div>
   );
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-xl bg-slate-100', className)} />;
+  return <div className={cn('animate-pulse rounded-2xl bg-[#e6eeee]', className)} />;
 }
 
+/** Centered empty state like the app's (icon in a soft circle, Montserrat title, muted copy). */
 export function EmptyState({
   icon: Icon,
   title,
   description,
   action,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   title: string;
   description?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-light">
-        <Icon className="h-7 w-7 text-brand-primary" />
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-white shadow-card">
+        <Icon size={40} className="text-muted" />
       </div>
-      <h3 className="text-base font-bold text-slate-900">{title}</h3>
-      {description && <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>}
-      {action && <div className="mt-5">{action}</div>}
+      <h3 className="text-lg font-bold text-ink">{title}</h3>
+      {description && <p className="mt-2 max-w-xs text-sm text-muted">{description}</p>}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-2xl border border-rose-100 bg-rose-50 px-6 py-10 text-center">
-      <p className="text-sm font-medium text-rose-700">{message}</p>
+    <div className="rounded-2xl bg-app-red-light px-6 py-10 text-center">
+      <p className="text-sm font-semibold text-app-red">{message}</p>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
           Try again
@@ -226,7 +263,7 @@ export function BookCover({
       alt={alt}
       loading="lazy"
       onError={() => setFailed(true)}
-      className={cn('h-full w-full object-cover', className)}
+      className={cn('h-full w-full bg-app-bg object-cover', className)}
     />
   );
 }
@@ -243,7 +280,7 @@ export function Avatar({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const style = { width: size, height: size, fontSize: size * 0.38 };
+  const style = { width: size, height: size, fontSize: size * 0.34 };
   if (src && !failed) {
     return (
       <img
@@ -259,7 +296,7 @@ export function Avatar({
     <span
       style={style}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full bg-brand-light font-bold text-brand-dark',
+        'font-heading inline-flex shrink-0 items-center justify-center rounded-full bg-secondary font-bold text-primary',
         className
       )}
       aria-label={name ?? 'User'}
@@ -271,6 +308,15 @@ export function Avatar({
 
 // ── Badges & rating ─────────────────────────────────────────
 
+const CONDITION_COLORS: Record<string, string> = {
+  NEW: 'text-app-green bg-app-green-light',
+  LIKE_NEW: 'text-primary bg-secondary',
+  GOOD: 'text-app-blue bg-app-blue-light',
+  FAIR: 'text-[#c49a00] bg-app-yellow-light',
+  POOR: 'text-app-red bg-app-red-light',
+  ACCEPTABLE: 'text-[#c49a00] bg-app-yellow-light',
+};
+
 export function ConditionBadge({
   condition,
   className,
@@ -281,8 +327,8 @@ export function ConditionBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
-        CONDITION_STYLES[condition] ?? 'bg-slate-50 text-slate-600 ring-slate-200',
+        'inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase',
+        CONDITION_COLORS[condition] ?? 'bg-gray-light text-muted',
         className
       )}
     >
@@ -294,13 +340,13 @@ export function ConditionBadge({
 export function Stars({ value, size = 14 }: { value: number; size?: number }) {
   return (
     <span className="inline-flex items-center gap-0.5" aria-label={`${value.toFixed(1)} out of 5`}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Star
-          key={n}
-          style={{ width: size, height: size }}
-          className={n <= Math.round(value) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}
-        />
-      ))}
+      {[1, 2, 3, 4, 5].map((n) =>
+        n <= Math.round(value) ? (
+          <IoStar key={n} size={size} className="text-app-yellow" />
+        ) : (
+          <IoStarOutline key={n} size={size} className="text-gray-heavy" />
+        )
+      )}
     </span>
   );
 }
@@ -309,30 +355,31 @@ export function StarInput({ value, onChange }: { value: number; onChange: (v: nu
   const [hover, setHover] = useState(0);
   return (
     <div
-      className="flex gap-1"
+      className="flex gap-2"
       onMouseLeave={() => setHover(0)}
       role="radiogroup"
       aria-label="Rating"
     >
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          role="radio"
-          aria-checked={value === n}
-          aria-label={`${n} star${n > 1 ? 's' : ''}`}
-          onMouseEnter={() => setHover(n)}
-          onClick={() => onChange(n)}
-          className="p-0.5"
-        >
-          <Star
-            className={cn(
-              'h-6 w-6 transition',
-              n <= (hover || value) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'
+      {[1, 2, 3, 4, 5].map((n) => {
+        const on = n <= (hover || value);
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={`${n} star${n > 1 ? 's' : ''}`}
+            onMouseEnter={() => setHover(n)}
+            onClick={() => onChange(n)}
+          >
+            {on ? (
+              <IoStar size={28} className="text-app-yellow" />
+            ) : (
+              <IoStarOutline size={28} className="text-app-yellow" />
             )}
-          />
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -341,27 +388,25 @@ export function StarInput({ value, onChange }: { value: number; onChange: (v: nu
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn('rounded-2xl border border-slate-100 bg-white p-5 shadow-xs', className)}>
+    <div className={cn('rounded-2xl border border-gray-light bg-white p-4 shadow-card', className)}>
       {children}
     </div>
   );
 }
 
-export function PageHeader({
-  title,
-  description,
+/** Small section heading used inside screens, e.g. “Seller Tools”. */
+export function SectionTitle({
+  children,
   action,
+  className,
 }: {
-  title: string;
-  description?: string;
+  children: React.ReactNode;
   action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">{title}</h1>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
-      </div>
+    <div className={cn('mb-3 flex items-center justify-between gap-3', className)}>
+      <h2 className="text-[15px] font-bold text-text md:text-base">{children}</h2>
       {action}
     </div>
   );
@@ -383,7 +428,7 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -391,39 +436,62 @@ export function Modal({
     >
       <div
         className={cn(
-          'max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl animate-fade-in sm:max-w-md sm:rounded-2xl',
+          'relative max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 shadow-xl animate-fade-in sm:max-w-md sm:rounded-3xl',
           className
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-4 text-lg font-bold text-slate-900">{title}</h2>
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-heavy sm:hidden" />
+        <h2 className="mb-4 text-lg font-bold text-ink">{title}</h2>
         {children}
       </div>
     </div>
   );
 }
 
+/** Filter chip like the app’s (teal fill when active, white pill otherwise). */
 export function Chip({
   active,
   onClick,
   children,
+  className,
 }: {
   active?: boolean;
   onClick?: () => void;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
+        'font-heading shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition',
         active
-          ? 'border-brand-primary bg-brand-primary text-white'
-          : 'border-slate-200 bg-white text-slate-600 hover:border-brand-primary hover:text-brand-primary'
+          ? 'border-primary bg-primary text-white'
+          : 'border-[#e5eaea] bg-white text-muted hover:border-primary hover:text-primary',
+        className
       )}
     >
       {children}
     </button>
+  );
+}
+
+/** Rounded icon tile used in the app’s lists (e.g. profile menu rows). */
+export function IconTile({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-full', className)}
+    >
+      {children}
+    </span>
   );
 }

@@ -22,7 +22,7 @@ export function OtpInput({
   };
 
   return (
-    <div className="flex justify-center gap-3">
+    <div className="flex justify-center gap-4">
       {digits.map((digit, i) => (
         <input
           key={i}
@@ -34,7 +34,7 @@ export function OtpInput({
           autoComplete={i === 0 ? 'one-time-code' : 'off'}
           maxLength={1}
           aria-label={`Digit ${i + 1}`}
-          className="h-14 w-14 rounded-xl border border-slate-200 text-center text-2xl font-bold text-slate-900 focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-light"
+          className="font-heading h-16 w-14 rounded-xl border border-gray-heavy bg-white text-center text-2xl font-bold text-ink focus:border-primary focus:outline-none"
           onChange={(e) => {
             const d = e.target.value.replace(/\D/g, '').slice(-1);
             setDigit(i, d);

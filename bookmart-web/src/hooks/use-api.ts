@@ -1,8 +1,17 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { api, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/endpoints';
+import { type BookView, toBookView } from '@/lib/book-view';
+import { type Category, matchesCategory } from '@/lib/categories';
+import { FALLBACK_COVER } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import type {
   Author,
@@ -62,6 +71,7 @@ export interface ListingQuery {
   tag?: string;
   ordering?: string;
   status?: string;
+  college?: number;
   page?: number;
   page_size?: number;
 }
@@ -73,6 +83,87 @@ export function useListings(params: ListingQuery, enabled = true) {
       (await api.get<Paginated<Listing>>(ENDPOINTS.MARKETPLACE.LISTINGS, { params })).data,
     placeholderData: keepPreviousData,
     enabled,
+  });
+}
+
+/** Every listing by sellers from one college, plus how many each other college has listed. */
+export function useCollegeListings(collegeId?: number) {
+  return useQuery({
+    queryKey: ['listings', 'college', collegeId],
+    enabled: !!collegeId,
+    queryFn: () =>
+      fetchAllPages<Listing>(ENDPOINTS.MARKETPLACE.LISTINGS, { college: collegeId }, 5),
+  });
+}
+
+export function useCollegeListingCounts(collegeIds: number[]) {
+  return useQueries({
+    queries: collegeIds.map((id) => ({
+      queryKey: ['listings', 'college-count', id],
+      queryFn: async () =>
+        (
+          await api.get<Paginated<Listing>>(ENDPOINTS.MARKETPLACE.LISTINGS, {
+            params: { college: id, page_size: 1 },
+          })
+        ).data.count,
+    })),
+  });
+}
+
+/**
+ * Every available listing, newest first. Like the app, the home feed sections and the
+ * category screens are all derived from this one list. Public, so it works logged out.
+ */
+export function useAvailableListings() {
+  return useQuery({
+    queryKey: ['listings', 'available'],
+    queryFn: () =>
+      fetchAllPages<Listing>(
+        ENDPOINTS.MARKETPLACE.LISTINGS,
+        { status: 'AVAILABLE', ordering: '-created_at' },
+        5
+      ),
+  });
+}
+
+/**
+ * Books for one of the app's categories, resolved the way GenreMasonryLayout does it:
+ * catalog books tagged with the category slug first, otherwise all available listings
+ * filtered by genre name.
+ */
+export function useCategoryBooks(category?: Category) {
+  return useQuery({
+    queryKey: ['category-books', category?.slug],
+    enabled: !!category,
+    queryFn: async (): Promise<BookView[]> => {
+      const tagged = await fetchAllPages<CatalogBook>(
+        ENDPOINTS.BOOKS.LIST,
+        { genres__slug: category!.slug },
+        3
+      ).catch(() => []);
+      const fromCatalog = tagged
+        .filter((b) => b.cheapest_listing)
+        .map((b) => ({
+          id: b.cheapest_listing!.id,
+          title: b.title,
+          author: b.authors.join(', ') || 'Unknown Author',
+          price: parseFloat(b.cheapest_listing!.price) || 0,
+          cover: b.cheapest_listing!.cover_image_url || b.cover_url || FALLBACK_COVER,
+          condition: b.cheapest_listing!.condition,
+          distance: 'Nearby',
+          views: 0,
+          sellerId: b.cheapest_listing!.seller.id,
+          createdAt: '',
+        }));
+      if (fromCatalog.length) return fromCatalog;
+
+      const listings = await fetchAllPages<Listing>(
+        ENDPOINTS.MARKETPLACE.LISTINGS,
+        { status: 'AVAILABLE', ordering: '-created_at' },
+        5
+      );
+      return listings.filter((l) => matchesCategory(category!, l.book.genres)).map(toBookView);
+    },
   });
 }
 

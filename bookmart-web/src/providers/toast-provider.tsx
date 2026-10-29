@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { IoAlertCircle, IoCheckmarkCircle, IoClose, IoInformationCircle } from 'react-icons/io5';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,7 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const ICONS = { success: CheckCircle2, error: XCircle, info: Info };
+const ICONS = { success: IoCheckmarkCircle, error: IoAlertCircle, info: IoInformationCircle };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6"
+        className="pointer-events-none fixed inset-x-0 top-4 z-[100] flex flex-col items-center gap-2 px-4"
         aria-live="polite"
       >
         {toasts.map((toast) => {
@@ -61,27 +61,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               key={toast.id}
               role="status"
               className={cn(
-                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border bg-white px-4 py-3 text-sm shadow-lg animate-fade-in',
-                toast.kind === 'success' && 'border-emerald-200',
-                toast.kind === 'error' && 'border-rose-200',
-                toast.kind === 'info' && 'border-slate-200'
+                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border-l-4 bg-white px-4 py-3 text-sm shadow-float animate-fade-in',
+                toast.kind === 'success' && 'border-app-green',
+                toast.kind === 'error' && 'border-app-red',
+                toast.kind === 'info' && 'border-primary'
               )}
             >
               <Icon
                 className={cn(
-                  'mt-0.5 h-4 w-4 shrink-0',
-                  toast.kind === 'success' && 'text-emerald-600',
-                  toast.kind === 'error' && 'text-rose-600',
-                  toast.kind === 'info' && 'text-brand-primary'
+                  'mt-0.5 h-5 w-5 shrink-0',
+                  toast.kind === 'success' && 'text-app-green',
+                  toast.kind === 'error' && 'text-app-red',
+                  toast.kind === 'info' && 'text-primary'
                 )}
               />
-              <p className="flex-1 text-slate-700">{toast.message}</p>
+              <p className="font-heading flex-1 font-medium text-ink">{toast.message}</p>
               <button
                 onClick={() => dismiss(toast.id)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-muted hover:text-ink"
                 aria-label="Dismiss"
               >
-                <X className="h-4 w-4" />
+                <IoClose className="h-4 w-4" />
               </button>
             </div>
           );

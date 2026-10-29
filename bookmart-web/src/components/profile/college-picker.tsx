@@ -1,8 +1,8 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, GraduationCap, Plus, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { IoAdd, IoCheckmarkCircle, IoLocationOutline, IoSchool, IoSearch } from 'react-icons/io5';
 import { Button, Input, Modal, Spinner } from '@/components/ui/primitives';
 import { useColleges } from '@/hooks/use-api';
 import { api, getErrorMessage } from '@/lib/api';
@@ -11,34 +11,53 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/providers/toast-provider';
 import type { College } from '@/types/api';
 
+/** College search field with a suggestions dropdown, like the app's Personalization screen. */
 export function CollegePicker({
   value,
   onChange,
+  error,
 }: {
   value: College | null;
   onChange: (college: College) => void;
+  error?: string;
 }) {
   const toast = useToast();
   const qc = useQueryClient();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(value?.name ?? '');
   const [debounced, setDebounced] = useState('');
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', district: '', state: '' });
   const [saving, setSaving] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  const { data: colleges = [], isFetching } = useColleges(debounced);
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (wrapper.current && !wrapper.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const { data: colleges = [], isFetching } = useColleges(debounced, open);
+
+  const select = (college: College) => {
+    onChange(college);
+    setQuery(college.name);
+    setOpen(false);
+  };
 
   const addCollege = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
       const { data } = await api.post<College>(ENDPOINTS.CORE.COLLEGES, form);
-      onChange(data);
+      select(data);
       qc.invalidateQueries({ queryKey: ['colleges'] });
       toast.success('College added');
       setAdding(false);
@@ -50,58 +69,74 @@ export function CollegePicker({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+    <div ref={wrapper} className="relative">
+      <div
+        className={cn(
+          'flex h-14 items-center gap-3 rounded-2xl border bg-white px-4',
+          open ? 'border-primary' : error ? 'border-app-red' : 'border-gray-heavy'
+        )}
+      >
+        <IoSchool size={18} className="shrink-0 text-primary" />
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search your college or university"
-          aria-label="Search colleges"
-          className="h-11 w-full rounded-xl border border-slate-200 pl-10 pr-10 text-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-light"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search your college / university"
+          aria-label="Search your college or university"
+          className="h-full min-w-0 flex-1 bg-transparent text-base font-medium text-ink placeholder:text-muted focus:outline-none"
         />
-        {isFetching && <Spinner className="absolute right-3 top-3 h-5 w-5" />}
+        {isFetching ? (
+          <Spinner className="h-5 w-5 border-2" />
+        ) : (
+          <IoSearch size={18} className="text-muted" />
+        )}
       </div>
 
-      <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-slate-100 p-1">
-        {colleges.length === 0 && !isFetching && (
-          <p className="px-3 py-4 text-center text-sm text-slate-500">No colleges found.</p>
-        )}
-        {colleges.map((college) => {
-          const selected = value?.id === college.id;
-          return (
+      {value && !open && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-primary">
+          <IoCheckmarkCircle size={14} /> {value.name}, {value.district}
+        </p>
+      )}
+      {error && <p className="mt-1 text-xs text-app-red">{error}</p>}
+
+      {open && (
+        <div className="absolute inset-x-0 top-[60px] z-30 max-h-60 overflow-y-auto rounded-2xl border border-gray-light bg-white py-1 shadow-float">
+          {colleges.map((c) => (
             <button
               type="button"
-              key={college.id}
-              onClick={() => onChange(college)}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition',
-                selected ? 'bg-brand-light text-brand-dark' : 'hover:bg-slate-50'
-              )}
+              key={c.id}
+              onClick={() => select(c)}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-app-bg"
             >
-              <GraduationCap className="h-4 w-4 shrink-0 text-brand-primary" />
-              <span className="flex-1">
-                <span className="block font-semibold">{college.name}</span>
-                <span className="block text-xs text-slate-500">
-                  {college.district}, {college.state}
+              <IoLocationOutline size={14} className="shrink-0 text-muted" />
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-semibold text-text">{c.name}</span>
+                <span className="text-muted">
+                  {' '}
+                  · {c.district}, {c.state}
                 </span>
               </span>
-              {selected && <Check className="h-4 w-4 text-brand-primary" />}
             </button>
-          );
-        })}
-      </div>
-
-      <button
-        type="button"
-        onClick={() => {
-          setForm({ name: query, district: '', state: '' });
-          setAdding(true);
-        }}
-        className="inline-flex items-center gap-1 text-sm font-semibold text-brand-primary hover:underline"
-      >
-        <Plus className="h-4 w-4" /> Can’t find your college? Add it
-      </button>
+          ))}
+          {!isFetching && colleges.length === 0 && (
+            <p className="px-4 py-3 text-sm text-muted">No colleges found.</p>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setForm({ name: query, district: '', state: '' });
+              setAdding(true);
+              setOpen(false);
+            }}
+            className="font-heading flex w-full items-center gap-2 border-t border-gray-light px-4 py-3 text-left text-sm font-semibold text-primary hover:bg-secondary"
+          >
+            <IoAdd size={18} /> Can’t find it? Add your college
+          </button>
+        </div>
+      )}
 
       <Modal open={adding} onClose={() => setAdding(false)} title="Add your college">
         <form onSubmit={addCollege} className="space-y-4">
@@ -123,11 +158,16 @@ export function CollegePicker({
             onChange={(e) => setForm({ ...form, state: e.target.value })}
             required
           />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setAdding(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" loading={saving}>
+            <Button type="submit" className="flex-1" loading={saving}>
               Add college
             </Button>
           </div>

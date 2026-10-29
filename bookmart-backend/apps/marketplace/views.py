@@ -52,10 +52,11 @@ import django_filters
 class BookListingFilter(django_filters.FilterSet):
     genre = django_filters.CharFilter(field_name="book__genres__slug")
     tag = django_filters.CharFilter(field_name="book__tags__tag__slug")
+    college = django_filters.NumberFilter(field_name="seller__profile__college")
 
     class Meta:
         model = BookListing
-        fields = ["condition", "status", "book", "genre", "tag"]
+        fields = ["condition", "status", "book", "genre", "tag", "college"]
 
 @extend_schema_view(
     list=extend_schema(

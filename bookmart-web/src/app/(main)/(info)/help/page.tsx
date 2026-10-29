@@ -14,7 +14,7 @@ export default function HelpPage() {
         </p>
         <p>
           Add a phone number in{' '}
-          <Link href="/profile/edit" className="font-semibold text-brand-primary">
+          <Link href="/profile/edit" className="font-semibold text-primary">
             Edit profile
           </Link>{' '}
           — buyers contact sellers on WhatsApp, so listings without a number can’t be contacted.
@@ -23,14 +23,14 @@ export default function HelpPage() {
       <InfoSection title="Managing your listings">
         <p>
           In{' '}
-          <Link href="/dashboard/listings" className="font-semibold text-brand-primary">
+          <Link href="/dashboard/listings" className="font-semibold text-primary">
             Manage listings
           </Link>{' '}
           you can edit a listing, mark it as sold or available again, boost it, or delete it.
         </p>
         <p>
           When you sell a book, use{' '}
-          <Link href="/dashboard/sold" className="font-semibold text-brand-primary">
+          <Link href="/dashboard/sold" className="font-semibold text-primary">
             Record a sale
           </Link>{' '}
           to save who bought it and mark the listing as sold in one step.
@@ -39,7 +39,7 @@ export default function HelpPage() {
       <InfoSection title="Account & security">
         <p>
           Forgot your password? Use{' '}
-          <Link href="/forgot-password" className="font-semibold text-brand-primary">
+          <Link href="/forgot-password" className="font-semibold text-primary">
             Reset password
           </Link>{' '}
           — we’ll email you a 4-digit code. Codes expire after 5 minutes.
@@ -52,7 +52,7 @@ export default function HelpPage() {
       <InfoSection title="Still need help?">
         <p>
           Check the{' '}
-          <Link href="/faqs" className="font-semibold text-brand-primary">
+          <Link href="/faqs" className="font-semibold text-primary">
             FAQs
           </Link>{' '}
           for more answers.

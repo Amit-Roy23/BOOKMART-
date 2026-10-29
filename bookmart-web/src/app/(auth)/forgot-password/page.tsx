@@ -1,9 +1,9 @@
 'use client';
 
-import { KeyRound } from 'lucide-react';
-import Link from 'next/link';
+import { IoLockOpenOutline } from 'react-icons/io5';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { AuthCard, AuthHero } from '@/components/auth/auth-hero';
 import { OtpInput } from '@/components/auth/otp-input';
 import { Button, Input } from '@/components/ui/primitives';
 import { api, getErrorMessage } from '@/lib/api';
@@ -60,69 +60,66 @@ export default function ForgotPasswordPage() {
 
   return (
     <>
-      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-light">
-        <KeyRound className="h-7 w-7 text-brand-primary" />
-      </div>
-      <h1 className="text-3xl font-extrabold text-slate-900">
-        {step === 'email' ? 'Forgot password?' : 'Set a new password'}
-      </h1>
-      <p className="mt-2 text-sm text-slate-500">
-        {step === 'email'
-          ? 'Enter the email you registered with and we’ll send you a reset code.'
-          : `Enter the code sent to ${email} and choose a new password.`}
-      </p>
-
-      {step === 'email' ? (
-        <form onSubmit={requestCode} className="mt-8 space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <Button type="submit" size="lg" className="w-full" loading={loading}>
-            Send reset code
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={resetPassword} className="mt-8 space-y-5">
-          <OtpInput value={otp} onChange={setOtp} />
-          <Input
-            label="New password"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <Input
-            label="Confirm new password"
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-          />
-          <Button type="submit" size="lg" className="w-full" loading={loading}>
-            Reset password
-          </Button>
-          <button
-            type="button"
-            onClick={() => requestCode()}
-            className="w-full text-center text-sm font-semibold text-brand-primary hover:underline"
-          >
-            Resend code
-          </button>
-        </form>
-      )}
-
-      <p className="mt-8 text-center text-sm">
-        <Link href="/login" className="text-slate-500 hover:underline">
-          Back to login
-        </Link>
-      </p>
+      <AuthHero
+        icon={IoLockOpenOutline}
+        backHref="/login"
+        title={step === 'email' ? 'Forgot Password' : 'Reset Password'}
+        subtitle={
+          step === 'email'
+            ? 'Enter your email to receive a password reset OTP code'
+            : `Enter the code sent to ${email} and choose a new password`
+        }
+      />
+      <AuthCard>
+        {step === 'email' ? (
+          <form onSubmit={requestCode} className="space-y-5">
+            <Input
+              label="Email Address"
+              type="email"
+              autoComplete="email"
+              placeholder="name@domain.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <Button type="submit" className="w-full" loading={loading}>
+              Send Reset OTP
+            </Button>
+          </form>
+        ) : (
+          <form onSubmit={resetPassword} className="space-y-5">
+            <OtpInput value={otp} onChange={setOtp} />
+            <Input
+              label="New Password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <Input
+              label="Confirm New Password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="••••••••"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+            />
+            <Button type="submit" className="w-full" loading={loading}>
+              Reset Password
+            </Button>
+            <button
+              type="button"
+              onClick={() => requestCode()}
+              className="font-heading w-full text-center text-sm font-semibold text-primary hover:underline"
+            >
+              Resend code
+            </button>
+          </form>
+        )}
+      </AuthCard>
     </>
   );
 }

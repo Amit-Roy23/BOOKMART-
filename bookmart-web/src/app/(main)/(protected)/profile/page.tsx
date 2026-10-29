@@ -1,96 +1,136 @@
 'use client';
 
-import {
-  BarChart3,
-  Bell,
-  ChevronRight,
-  ClipboardList,
-  Eye,
-  FileText,
-  Flag,
-  GraduationCap,
-  Heart,
-  HelpCircle,
-  Info,
-  LayoutList,
-  LogOut,
-  type LucideIcon,
-  MapPin,
-  MessageCircle,
-  PackageCheck,
-  Pencil,
-  Rocket,
-  Share2,
-  Shield,
-  BookOpen,
-} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Avatar, Button, Card } from '@/components/ui/primitives';
-import { formatCompact } from '@/lib/utils';
+import { useEffect, useRef, useState } from 'react';
+import type { IconType } from 'react-icons';
+import {
+  IoBagHandleOutline,
+  IoBarChartOutline,
+  IoChatbubbleEllipsesOutline,
+  IoChatbubblesOutline,
+  IoChevronForward,
+  IoClipboardOutline,
+  IoDocumentTextOutline,
+  IoEllipsisVertical,
+  IoEyeOutline,
+  IoFlagOutline,
+  IoHeartOutline,
+  IoHelpBuoyOutline,
+  IoInformationCircleOutline,
+  IoListOutline,
+  IoLocationOutline,
+  IoLogOutOutline,
+  IoNotificationsOutline,
+  IoPersonOutline,
+  IoRocketOutline,
+  IoShareSocialOutline,
+  IoShieldCheckmark,
+  IoShieldCheckmarkOutline,
+} from 'react-icons/io5';
+import { Avatar } from '@/components/ui/primitives';
+import { useNotifications } from '@/hooks/use-api';
+import { cn, formatCompact, timeAgo } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { useToast } from '@/providers/toast-provider';
+
+// Layout follows the app's Profile.screen.tsx.
 
 const QUICK_ACTIONS = [
   {
     href: '/contacts',
     label: 'Contacts',
-    icon: MessageCircle,
-    className: 'bg-sky-50 text-sky-600',
+    icon: IoChatbubbleEllipsesOutline,
+    color: '#1877F2',
+    bg: '#001aff23',
   },
   {
     href: '/dashboard/sold',
-    label: 'Sold books',
-    icon: PackageCheck,
-    className: 'bg-emerald-50 text-emerald-600',
+    label: 'Sold Books',
+    icon: IoBagHandleOutline,
+    color: '#10B981',
+    bg: '#10b9811a',
   },
   {
     href: '/favourites',
-    label: 'My interests',
-    icon: Heart,
-    className: 'bg-rose-50 text-rose-600',
+    label: 'My Interests',
+    icon: IoHeartOutline,
+    color: '#EF4545',
+    bg: '#ef44441a',
   },
   {
     href: '/requests?tab=mine',
     label: 'Requests',
-    icon: ClipboardList,
-    className: 'bg-amber-50 text-amber-600',
+    icon: IoClipboardOutline,
+    color: '#D9A400',
+    bg: '#f59e0b1a',
   },
 ];
 
-function MenuRow({
+function MenuTile({
   href,
   icon: Icon,
   title,
   subtitle,
+  color = '#333333',
+  bg = '#F2F4F4',
   badge,
+  danger,
+  onClick,
 }: {
-  href: string;
-  icon: LucideIcon;
+  href?: string;
+  icon: IconType;
   title: string;
   subtitle?: string;
+  color?: string;
+  bg?: string;
   badge?: string;
+  danger?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-4 rounded-xl px-2 py-3 transition hover:bg-slate-50"
-    >
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-light">
-        <Icon className="h-5 w-5 text-brand-primary" />
+  const content = (
+    <>
+      <span
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        style={{
+          background: danger ? 'rgba(239,68,68,0.1)' : bg,
+          color: danger ? '#EF4545' : color,
+        }}
+      >
+        <Icon size={22} />
       </span>
-      <span className="flex-1">
-        <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          {title}
-          {badge && (
-            <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-900">
-              {badge}
-            </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            'font-heading block text-sm font-semibold',
+            danger ? 'text-app-red' : 'text-ink'
           )}
+        >
+          {title}
         </span>
-        {subtitle && <span className="block text-xs text-slate-500">{subtitle}</span>}
+        {subtitle && <span className="block truncate text-xs text-muted">{subtitle}</span>}
       </span>
-      <ChevronRight className="h-4 w-4 text-slate-400" />
+      {badge ? (
+        <span className="font-heading rounded-full bg-app-yellow px-2 py-0.5 text-[10px] font-bold text-ink">
+          {badge}
+        </span>
+      ) : (
+        <IoChevronForward size={20} className={danger ? 'text-app-red' : 'text-muted'} />
+      )}
+    </>
+  );
+  const className =
+    'flex w-full items-center gap-4 rounded-2xl bg-white px-4 py-4 text-left shadow-card transition hover:-translate-y-0.5';
+  if (onClick) {
+    return (
+      <button onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+  return (
+    <Link href={href!} className={className}>
+      {content}
     </Link>
   );
 }
@@ -99,179 +139,249 @@ export default function ProfilePage() {
   const { profile, signOut } = useAuth();
   const router = useRouter();
   const toast = useToast();
+  const { data: notifications = [] } = useNotifications();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
   if (!profile) return null;
 
-  const share = async () => {
-    const url = `${window.location.origin}/sellers/${profile.user_id}`;
+  const share = async (path: string, title: string) => {
+    const url = `${window.location.origin}${path}`;
     try {
-      if (navigator.share)
-        await navigator.share({ title: `${profile.full_name} on Bookmart`, url });
+      if (navigator.share) await navigator.share({ title, url });
       else {
         await navigator.clipboard.writeText(url);
-        toast.success('Profile link copied');
+        toast.success('Link copied');
       }
     } catch {
       // Share sheet dismissed.
     }
   };
 
+  const logout = async () => {
+    if (!confirm('Are you sure you want to log out?')) return;
+    await signOut();
+    router.replace('/login');
+  };
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-primary to-brand-dark p-6 text-white md:p-8">
-        <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center">
+    <div>
+      <section className="bg-gradient-to-b from-primary to-app-bg px-6 pb-6 pt-5 md:rounded-b-[32px]">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-white">My Profile</h1>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="More options"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white/80 bg-white/10 text-white"
+            >
+              <IoEllipsisVertical size={20} />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 z-30 mt-2 w-52 overflow-hidden rounded-2xl bg-white py-1 shadow-float">
+                <button
+                  onClick={() =>
+                    share(`/sellers/${profile.user_id}`, `${profile.full_name} on Bookmart`)
+                  }
+                  className="flex w-full items-center gap-3 px-4 py-3 text-sm text-text hover:bg-app-bg"
+                >
+                  <IoShareSocialOutline size={18} /> Share Profile
+                </button>
+                <Link
+                  href="/profile/edit"
+                  className="flex items-center gap-3 px-4 py-3 text-sm text-text hover:bg-app-bg"
+                >
+                  <IoPersonOutline size={18} /> Edit Profile
+                </Link>
+                <Link
+                  href={`/sellers/${profile.user_id}`}
+                  className="flex items-center gap-3 border-t border-gray-light px-4 py-3 text-sm text-text hover:bg-app-bg"
+                >
+                  <IoEyeOutline size={18} /> View Public Profile
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center gap-4">
           <Avatar
             src={profile.image}
             name={profile.full_name}
-            size={88}
-            className="ring-4 ring-white/30"
+            size={80}
+            className="border-[3px] border-white/40 bg-white/20 text-2xl"
           />
-          <div className="flex-1">
-            <h1 className="text-2xl font-extrabold">{profile.full_name}</h1>
-            <p className="text-sm text-white/80">{profile.email}</p>
-            <div className="mt-2 flex flex-wrap gap-3 text-sm text-white/85">
-              {profile.college && (
-                <span className="inline-flex items-center gap-1">
-                  <GraduationCap className="h-4 w-4" /> {profile.college.name}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="h-4 w-4" /> {profile.city_location || 'Location not set'}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-heading truncate text-xl font-bold text-ink">
+                {profile.full_name}
+              </p>
+              <span className="font-heading inline-flex items-center gap-0.5 rounded-full bg-app-yellow px-1.5 py-0.5 text-[10px] font-bold text-ink">
+                <IoShieldCheckmark size={11} /> Top Seller
               </span>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              className="bg-white/15 text-white hover:bg-white/25"
-              onClick={share}
-            >
-              <Share2 className="h-4 w-4" /> Share
-            </Button>
-            <Link href="/profile/edit">
-              <Button className="bg-white text-brand-dark hover:bg-brand-light">
-                <Pencil className="h-4 w-4" /> Edit
-              </Button>
-            </Link>
+            <p className="mt-1 flex items-center gap-1 text-xs text-text">
+              <IoLocationOutline size={13} />{' '}
+              {profile.city_location || profile.college?.name || 'N/A'}
+            </p>
           </div>
         </div>
-        <div className="relative z-10 mt-6 grid grid-cols-3 gap-3">
+
+        <div className="mt-6 grid grid-cols-3 divide-x divide-white/25 rounded-2xl bg-[#3f5252]/85 py-4 text-center text-white backdrop-blur">
           {[
-            { label: 'Profile views', value: profile.profile_views, icon: Eye },
-            { label: 'WhatsApp contacts', value: profile.whatsapp_contacts, icon: MessageCircle },
-            { label: 'Active listings', value: profile.active_listings_count, icon: BookOpen },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="rounded-2xl bg-white/10 p-3 text-center">
-              <Icon className="mx-auto h-4 w-4 text-white/80" />
-              <p className="mt-1 text-xl font-extrabold">{formatCompact(value)}</p>
-              <p className="text-[11px] text-white/75">{label}</p>
+            { label: 'Total Views', value: profile.profile_views },
+            { label: 'WhatsApp Contacts', value: profile.whatsapp_contacts },
+            { label: 'Active Listings', value: profile.active_listings_count },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <p className="font-heading text-lg font-bold">{formatCompact(value)}</p>
+              <p className="text-[10px] text-white/80">{label}</p>
             </div>
           ))}
         </div>
-        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10" />
       </section>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {QUICK_ACTIONS.map(({ href, label, icon: Icon, className }) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex flex-col items-center gap-2 rounded-2xl border border-slate-100 bg-white p-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:shadow-sm"
-          >
-            <span
-              className={`flex h-11 w-11 items-center justify-center rounded-full ${className}`}
-            >
-              <Icon className="h-5 w-5" />
-            </span>
-            {label}
-          </Link>
-        ))}
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="p-3">
-          <h2 className="px-2 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-            Seller tools
-          </h2>
-          <MenuRow
-            href="/dashboard/listings"
-            icon={LayoutList}
-            title="Manage listings"
-            subtitle="Edit, delete or update your books"
-          />
-          <MenuRow
-            href="/dashboard/boost"
-            icon={Rocket}
-            title="Boost listing"
-            subtitle="Increase visibility, get more buyers"
-            badge="PRO"
-          />
-          <MenuRow
-            href="/dashboard/analytics"
-            icon={BarChart3}
-            title="Analytics"
-            subtitle="Views and interest on your books"
-          />
-          <MenuRow
-            href={`/sellers/${profile.user_id}`}
-            icon={Eye}
-            title="Public profile"
-            subtitle="See what buyers see"
-          />
-        </Card>
-        <Card className="p-3">
-          <h2 className="px-2 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-            Account
-          </h2>
-          <MenuRow
-            href="/profile/edit"
-            icon={Pencil}
-            title="Edit profile"
-            subtitle="Update your personal details"
-          />
-          <MenuRow
-            href="/profile/addresses"
-            icon={MapPin}
-            title="Saved address"
-            subtitle="Your pickup area"
-          />
-          <MenuRow
-            href="/notifications"
-            icon={Bell}
-            title="Notifications"
-            subtitle="Buyer interest and alerts"
-          />
-          <MenuRow
-            href="/report?tab=mine"
-            icon={Flag}
-            title="My reports"
-            subtitle="Reports you’ve submitted"
-          />
-        </Card>
-        <Card className="p-3 md:col-span-2">
-          <h2 className="px-2 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-            General
-          </h2>
-          <div className="grid md:grid-cols-2 md:gap-x-4">
-            <MenuRow href="/help" icon={HelpCircle} title="Help & support" />
-            <MenuRow href="/faqs" icon={Info} title="FAQs" />
-            <MenuRow href="/privacy" icon={Shield} title="Privacy policy" />
-            <MenuRow href="/terms" icon={FileText} title="Terms & conditions" />
-            <MenuRow href="/about" icon={BookOpen} title="About Bookmart" />
+      <div className="space-y-6 px-6">
+        <section>
+          <h2 className="mb-3 text-base font-bold text-ink">Quick Actions</h2>
+          <div className="grid grid-cols-4 gap-2.5">
+            {QUICK_ACTIONS.map(({ href, label, icon: Icon, color, bg }) => (
+              <Link
+                key={href}
+                href={href}
+                className="flex flex-col items-center gap-2 rounded-2xl bg-white px-1 py-3 shadow-card transition hover:-translate-y-0.5"
+              >
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-full"
+                  style={{ background: bg, color }}
+                >
+                  <Icon size={20} />
+                </span>
+                <span className="text-center text-[11px] font-semibold text-ink">{label}</span>
+              </Link>
+            ))}
           </div>
-        </Card>
-      </div>
+        </section>
 
-      <Button
-        variant="outline"
-        className="w-full border-rose-200 text-rose-600 hover:border-rose-400 hover:text-rose-700"
-        onClick={async () => {
-          if (!confirm('Log out of Bookmart?')) return;
-          await signOut();
-          router.replace('/login');
-        }}
-      >
-        <LogOut className="h-4 w-4" /> Logout
-      </Button>
+        <div className="grid gap-6 md:grid-cols-2">
+          <section className="space-y-3">
+            <h2 className="text-base font-bold text-ink">Seller Tools</h2>
+            <MenuTile
+              href="/dashboard/listings"
+              icon={IoListOutline}
+              title="Manage Listings"
+              subtitle="Edit, delete or update your active books"
+              color="#008080"
+              bg="#00968814"
+            />
+            <MenuTile
+              href="/dashboard/boost"
+              icon={IoRocketOutline}
+              title="Boost Listing"
+              subtitle="Increase visibility and get more buyers"
+              color="#F97316"
+              bg="#FFF1E6"
+              badge="PRO"
+            />
+            <MenuTile
+              href="/dashboard/analytics"
+              icon={IoBarChartOutline}
+              title="Analytics"
+              subtitle="Views and interest on your books"
+              color="#AA5AF8"
+              bg="#F4EAFE"
+            />
+          </section>
+          <section className="space-y-3">
+            <h2 className="text-base font-bold text-ink">Account Settings</h2>
+            <MenuTile
+              href="/profile/edit"
+              icon={IoPersonOutline}
+              title="Edit Profile"
+              subtitle="Update your personal details"
+              color="#1877F2"
+              bg="#001aff14"
+            />
+            <MenuTile
+              href="/profile/addresses"
+              icon={IoLocationOutline}
+              title="Saved Addresses"
+              subtitle="Manage your delivery addresses"
+              color="#10B981"
+              bg="#10b9811a"
+            />
+            <MenuTile
+              href="/notifications"
+              icon={IoNotificationsOutline}
+              title="Notifications"
+              subtitle="Customize your alert preferences"
+              color="#008080"
+              bg="#00968814"
+            />
+            <MenuTile
+              href="/report?tab=mine"
+              icon={IoFlagOutline}
+              title="My Reports"
+              subtitle="Reports you have submitted"
+              color="#EF4545"
+              bg="#ef44441a"
+            />
+          </section>
+        </div>
+
+        <section className="space-y-3">
+          <h2 className="text-base font-bold text-ink">General</h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            <MenuTile href="/help" icon={IoHelpBuoyOutline} title="Help & Support" />
+            <MenuTile href="/faqs" icon={IoChatbubblesOutline} title="FAQs" />
+            <MenuTile href="/privacy" icon={IoShieldCheckmarkOutline} title="Privacy Policy" />
+            <MenuTile href="/terms" icon={IoDocumentTextOutline} title="Terms & Conditions" />
+            <MenuTile href="/about" icon={IoInformationCircleOutline} title="About" />
+            <MenuTile
+              icon={IoShareSocialOutline}
+              title="Share App"
+              onClick={() => share('/', 'Bookmart – Your Campus Library Companion')}
+            />
+          </div>
+        </section>
+
+        <MenuTile icon={IoLogOutOutline} title="Logout" danger onClick={logout} />
+
+        {notifications.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-base font-bold text-ink">Recent Activities</h2>
+            {notifications.slice(0, 3).map((n) => (
+              <Link
+                key={n.id}
+                href="/notifications"
+                className="flex items-center gap-4 rounded-2xl bg-white px-4 py-4 shadow-card"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
+                  {n.notification_type === 'BUYER_INTEREST' ? (
+                    <IoChatbubbleEllipsesOutline size={20} />
+                  ) : (
+                    <IoEyeOutline size={20} />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="font-heading block truncate text-sm font-semibold text-ink">
+                    {n.title}
+                  </span>
+                  <span className="text-xs text-muted">{timeAgo(n.created_at)}</span>
+                </span>
+              </Link>
+            ))}
+          </section>
+        )}
+      </div>
     </div>
   );
 }

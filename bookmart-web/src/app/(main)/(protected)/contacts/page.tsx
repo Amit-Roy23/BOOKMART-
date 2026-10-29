@@ -1,110 +1,106 @@
 'use client';
 
-import { ArrowDownLeft, ArrowUpRight, MessageCircle, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
-  Avatar,
-  Chip,
-  EmptyState,
-  ErrorState,
-  PageHeader,
-  Skeleton,
-} from '@/components/ui/primitives';
+  IoBookOutline,
+  IoChatbubblesOutline,
+  IoLogoWhatsapp,
+  IoSearchOutline,
+} from 'react-icons/io5';
+import { ScreenHeader } from '@/components/app/screen-header';
+import { Avatar, EmptyState, ErrorState, Skeleton } from '@/components/ui/primitives';
 import { useContacts } from '@/hooks/use-api';
 import { getErrorMessage } from '@/lib/api';
-import { cn, formatDate, formatPrice } from '@/lib/utils';
+import { formatDate, formatPrice } from '@/lib/utils';
 
+/** “Contact History” — the app's ContactScreen, backed by the contacts ledger. */
 export default function ContactsPage() {
   const { data: contacts = [], isLoading, isError, error, refetch } = useContacts();
   const [query, setQuery] = useState('');
-  const [type, setType] = useState<'ALL' | 'BOUGHT' | 'SOLD'>('ALL');
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return contacts.filter(
       (c) =>
-        (type === 'ALL' || c.deal_type === type) &&
-        (!q ||
-          c.contact_person_name.toLowerCase().includes(q) ||
-          c.book_title.toLowerCase().includes(q))
+        !q ||
+        c.contact_person_name.toLowerCase().includes(q) ||
+        c.book_title.toLowerCase().includes(q)
     );
-  }, [contacts, query, type]);
+  }, [contacts, query]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader
-        title="Contacts"
-        description="Sellers you’ve contacted on WhatsApp and buyers you’ve sold to."
+    <div className="mx-auto max-w-3xl">
+      <ScreenHeader
+        title="Contact History"
+        fallback="/profile"
+        right={
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-app-green shadow-card">
+            <IoLogoWhatsapp size={22} />
+          </span>
+        }
       />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <div className="space-y-5 px-6">
+        <div className="flex h-12 items-center gap-2 rounded-3xl bg-white px-4 shadow-card">
+          <IoSearchOutline size={18} className="text-muted" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name or book"
+            placeholder="Search by name, book or message..."
             aria-label="Search contacts"
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-brand-primary focus:outline-none"
+            className="h-full flex-1 bg-transparent text-sm focus:outline-none"
           />
         </div>
-        <div className="flex gap-2">
-          <Chip active={type === 'ALL'} onClick={() => setType('ALL')}>
-            All
-          </Chip>
-          <Chip active={type === 'BOUGHT'} onClick={() => setType('BOUGHT')}>
-            Buying
-          </Chip>
-          <Chip active={type === 'SOLD'} onClick={() => setType('SOLD')}>
-            Selling
-          </Chip>
-        </div>
-      </div>
 
-      {isLoading ? (
-        <Skeleton className="h-48" />
-      ) : isError ? (
-        <ErrorState message={getErrorMessage(error)} onRetry={() => refetch()} />
-      ) : shown.length === 0 ? (
-        <EmptyState
-          icon={MessageCircle}
-          title="No contacts yet"
-          description="When you contact a seller on WhatsApp from a listing it will be logged here."
-        />
-      ) : (
-        <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-100 bg-white">
-          {shown.map((c) => {
-            const bought = c.deal_type === 'BOUGHT';
-            return (
-              <li key={c.id} className="flex items-center gap-3 p-4">
-                <Avatar name={c.contact_person_name} size={44} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-900">{c.contact_person_name}</p>
-                  <p className="truncate text-sm text-slate-500">{c.book_title}</p>
-                </div>
-                <div className="text-right">
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold',
-                      bought ? 'bg-sky-50 text-sky-700' : 'bg-emerald-50 text-emerald-700'
-                    )}
-                  >
-                    {bought ? (
-                      <ArrowDownLeft className="h-3 w-3" />
-                    ) : (
-                      <ArrowUpRight className="h-3 w-3" />
-                    )}
-                    {bought ? 'Buying' : 'Sold'}
-                  </span>
-                  <p className="mt-1 text-sm font-bold text-slate-900">
-                    {formatPrice(c.price_recorded)}
-                  </p>
-                  <p className="text-xs text-slate-400">{formatDate(c.transaction_date)}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+        {isLoading ? (
+          <Skeleton className="h-24" />
+        ) : isError ? (
+          <ErrorState message={getErrorMessage(error)} onRetry={() => refetch()} />
+        ) : shown.length === 0 ? (
+          <div className="pt-[10vh]">
+            <EmptyState
+              icon={IoChatbubblesOutline}
+              title="No Contacts Yet"
+              description="Sellers you contact on WhatsApp and buyers you sell to will show up here."
+            />
+          </div>
+        ) : (
+          <section>
+            <h2 className="font-heading mb-3 text-xs font-bold tracking-[0.15em] text-muted">
+              RECENT CHATS
+            </h2>
+            <ul className="space-y-3">
+              {shown.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-card"
+                >
+                  <Avatar name={c.contact_person_name} size={52} className="bg-app-bg text-muted" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-heading truncate text-base font-bold text-ink">
+                        {c.contact_person_name}
+                      </p>
+                      <span className="shrink-0 text-xs text-muted">
+                        {formatDate(c.transaction_date, { year: undefined })}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="inline-flex max-w-[70%] items-center gap-1 truncate rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        <IoBookOutline size={11} /> {c.book_title}
+                      </span>
+                      <span className="text-[11px] text-muted">
+                        {c.deal_type === 'SOLD' ? 'Sold' : 'Buying'} ·{' '}
+                        {formatPrice(c.price_recorded)}
+                      </span>
+                    </div>
+                  </div>
+                  <IoLogoWhatsapp size={22} className="shrink-0 text-app-green" />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
     </div>
   );
 }

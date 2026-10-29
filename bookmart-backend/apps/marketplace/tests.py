@@ -812,3 +812,22 @@ class NearbyListingsTests(APITestCase):
         result = response.data["results"][0]
         self.assertEqual(result["id"], self.close.id)
         self.assertLess(result["distance_km"], 1)
+
+
+class CollegeListingFilterTests(APITestCase):
+    def test_filter_listings_by_seller_college(self):
+        from apps.core.models import College
+
+        college = College.objects.create(name="Test College", district="Kolkata", state="West Bengal")
+        student = User.objects.create_user(email="student@example.com", full_name="Student", password="testpassword123")
+        student.profile.college = college
+        student.profile.save()
+        other = User.objects.create_user(email="other@example.com", full_name="Other", password="testpassword123")
+
+        book = Book.objects.create(title="Campus Book")
+        mine = BookListing.objects.create(book=book, seller=student, price="100.00")
+        BookListing.objects.create(book=book, seller=other, price="90.00")
+
+        response = self.client.get("/api/v1/marketplace/listings/", {"college": college.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data["results"]], [mine.id])

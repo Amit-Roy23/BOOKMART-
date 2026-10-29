@@ -1,9 +1,18 @@
 'use client';
 
-import { CheckCircle2, ClipboardList, Plus, Search, Tag, Trash2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import {
+  IoAdd,
+  IoCheckmarkCircleOutline,
+  IoClipboardOutline,
+  IoCloseCircleOutline,
+  IoPricetagOutline,
+  IoSearchOutline,
+  IoTrashOutline,
+} from 'react-icons/io5';
+import { ScreenHeader } from '@/components/app/screen-header';
 import {
   Avatar,
   Button,
@@ -11,7 +20,6 @@ import {
   ConditionBadge,
   EmptyState,
   ErrorState,
-  PageHeader,
   Skeleton,
 } from '@/components/ui/primitives';
 import {
@@ -35,17 +43,17 @@ function budget(r: Requirement) {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  ACTIVE: 'bg-emerald-50 text-emerald-700',
-  FULFILLED: 'bg-sky-50 text-sky-700',
-  CANCELLED: 'bg-slate-100 text-slate-500',
+  ACTIVE: 'bg-app-green-light text-app-green',
+  FULFILLED: 'bg-app-blue-light text-app-blue',
+  CANCELLED: 'bg-gray-light text-muted',
 };
 
-function RequirementCard({ r, mine }: { r: Requirement; mine?: boolean }) {
+function RequirementCard({ r }: { r: Requirement }) {
   const toast = useToast();
   const update = useUpdateRequirement();
   const remove = useDeleteRequirement();
   const { profile } = useAuth();
-  const isOwn = mine || r.user.id === profile?.user_id;
+  const mine = r.user.id === profile?.user_id;
 
   const setStatus = (status: string, message: string) =>
     update.mutate(
@@ -57,63 +65,61 @@ function RequirementCard({ r, mine }: { r: Requirement; mine?: boolean }) {
     );
 
   return (
-    <li className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4">
+    <li className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-bold text-slate-900">{r.book?.title ?? r.book_title}</p>
-          {r.book?.author && <p className="text-xs text-slate-500">by {r.book.author}</p>}
+          <p className="font-heading truncate text-[15px] font-bold text-ink">
+            {r.book?.title ?? r.book_title}
+          </p>
+          {r.book?.author && <p className="text-xs text-muted">by {r.book.author}</p>}
         </div>
         <span
           className={cn(
-            'shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold',
+            'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold capitalize',
             STATUS_STYLES[r.status]
           )}
         >
-          {r.status.charAt(0) + r.status.slice(1).toLowerCase()}
+          {r.status.toLowerCase()}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
         <ConditionBadge condition={r.preferred_condition} />
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">
-          <Tag className="h-3 w-3" /> {budget(r)}
+        <span className="inline-flex items-center gap-1 rounded-md bg-app-green-light px-1.5 py-0.5 text-[10px] font-bold text-app-green">
+          <IoPricetagOutline size={11} /> {budget(r)}
         </span>
         {r.matching_count > 0 && (
-          <span className="rounded-full bg-brand-light px-2 py-0.5 font-semibold text-brand-dark">
-            {r.matching_count} matching listing{r.matching_count > 1 ? 's' : ''}
+          <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-primary">
+            {r.matching_count} matching
           </span>
         )}
       </div>
-      {r.notes && <p className="text-sm text-slate-600">{r.notes}</p>}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-50 pt-3">
-        <span className="flex items-center gap-2 text-xs text-slate-500">
+      {r.notes && <p className="text-sm text-text">{r.notes}</p>}
+      <div className="flex items-center justify-between gap-2 border-t border-gray-light pt-3">
+        <span className="flex items-center gap-2 text-xs text-muted">
           <Avatar src={r.user.profile_image} name={r.user.full_name} size={24} />
-          {isOwn ? 'You' : r.user.full_name} · {timeAgo(r.created_at)}
+          {mine ? 'You' : r.user.full_name} · {timeAgo(r.created_at)}
         </span>
-        {isOwn ? (
-          <div className="flex gap-1">
+        {mine ? (
+          <span className="flex gap-1">
             {r.status === 'ACTIVE' && (
               <>
-                <Button
-                  size="sm"
-                  variant="ghost"
+                <button
                   onClick={() => setStatus('FULFILLED', 'Marked as fulfilled')}
+                  aria-label="Mark fulfilled"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-app-green hover:bg-app-green-light"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Fulfilled
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
+                  <IoCheckmarkCircleOutline size={18} />
+                </button>
+                <button
                   onClick={() => setStatus('CANCELLED', 'Request cancelled')}
+                  aria-label="Cancel request"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-gray-light"
                 >
-                  <XCircle className="h-3.5 w-3.5" /> Cancel
-                </Button>
+                  <IoCloseCircleOutline size={18} />
+                </button>
               </>
             )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-rose-600 hover:bg-rose-50"
-              aria-label="Delete request"
+            <button
               onClick={() => {
                 if (!confirm('Delete this request?')) return;
                 remove.mutate(r.id, {
@@ -121,16 +127,19 @@ function RequirementCard({ r, mine }: { r: Requirement; mine?: boolean }) {
                   onError: (err) => toast.error(getErrorMessage(err)),
                 });
               }}
+              aria-label="Delete request"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-app-red hover:bg-app-red-light"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+              <IoTrashOutline size={16} />
+            </button>
+          </span>
         ) : (
           r.status === 'ACTIVE' && (
-            <Link href="/sell">
-              <Button size="sm" variant="secondary">
-                I have this book
-              </Button>
+            <Link
+              href="/sell"
+              className="font-heading rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-white"
+            >
+              I have this book
             </Link>
           )
         )}
@@ -160,99 +169,99 @@ function RequestsView() {
 
   const all = useRequirements({ search: search || undefined, page });
   const mine = useMyRequirements(authed && tab === 'mine');
-  const totalPages = Math.max(1, Math.ceil((all.data?.count ?? 0) / 20));
   const query = tab === 'mine' ? mine : all;
   const items = tab === 'mine' ? (mine.data ?? []) : (all.data?.results ?? []);
+  const totalPages = Math.max(1, Math.ceil((all.data?.count ?? 0) / 20));
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Book requests"
-        description="Students looking for specific books. Have one? Sell it to them."
-        action={
-          <Link href="/requests/new">
-            <Button>
-              <Plus className="h-4 w-4" /> Request a book
-            </Button>
+    <div className="mx-auto max-w-3xl">
+      <ScreenHeader
+        title="Book Requests"
+        right={
+          <Link
+            href="/requests/new"
+            aria-label="Post a requirement"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white"
+          >
+            <IoAdd size={22} />
           </Link>
         }
       />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="space-y-4 px-6">
         {authed && (
           <div className="flex gap-2">
-            <Chip active={tab === 'all'} onClick={() => router.push(pathname)}>
-              All requests
+            <Chip active={tab === 'all'} onClick={() => router.replace(pathname)}>
+              All Requests
             </Chip>
-            <Chip active={tab === 'mine'} onClick={() => router.push(`${pathname}?tab=mine`)}>
-              My requests
+            <Chip active={tab === 'mine'} onClick={() => router.replace(`${pathname}?tab=mine`)}>
+              My Requests
             </Chip>
           </div>
         )}
         {tab === 'all' && (
-          <div className="relative flex-1 sm:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <div className="flex h-12 items-center gap-2 rounded-3xl bg-white px-4 shadow-card">
+            <IoSearchOutline size={18} className="text-muted" />
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Search requested books"
+              placeholder="Search requested books..."
               aria-label="Search requests"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-brand-primary focus:outline-none"
+              className="h-full flex-1 bg-transparent text-sm focus:outline-none"
             />
           </div>
         )}
+
+        {query.isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-36" />
+            ))}
+          </div>
+        ) : query.isError ? (
+          <ErrorState message={getErrorMessage(query.error)} onRetry={() => query.refetch()} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={IoClipboardOutline}
+            title={tab === 'mine' ? 'No Requests Yet' : 'No Open Requests'}
+            description="Can't find a book? Post a requirement and sellers will reach out."
+            action={
+              <Link href="/requests/new">
+                <Button size="md">Post a Requirement</Button>
+              </Link>
+            }
+          />
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2">
+            {items.map((r) => (
+              <RequirementCard key={r.id} r={r} />
+            ))}
+          </ul>
+        )}
+
+        {tab === 'all' && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 pb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </div>
-
-      {query.isLoading ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-40" />
-          ))}
-        </div>
-      ) : query.isError ? (
-        <ErrorState message={getErrorMessage(query.error)} onRetry={() => query.refetch()} />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={ClipboardList}
-          title={tab === 'mine' ? 'You haven’t requested any books' : 'No open requests'}
-          description="Can’t find a book? Post a request and sellers will reach out."
-          action={
-            <Link href="/requests/new">
-              <Button>Request a book</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
-          {items.map((r) => (
-            <RequirementCard key={r.id} r={r} mine={tab === 'mine'} />
-          ))}
-        </ul>
-      )}
-
-      {tab === 'all' && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-slate-600">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,25 +1,39 @@
 'use client';
 
-import { IndianRupee, PackageCheck, Plus, Search, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
+  IoAdd,
+  IoBagHandleOutline,
+  IoCheckmark,
+  IoCubeOutline,
+  IoFilterOutline,
+  IoPersonCircleOutline,
+  IoSearchOutline,
+  IoWalletOutline,
+} from 'react-icons/io5';
+import { ScreenHeader } from '@/components/app/screen-header';
+import {
   BookCover,
   Button,
-  Card,
   EmptyState,
   Input,
   Modal,
-  PageHeader,
   Select,
   Skeleton,
 } from '@/components/ui/primitives';
 import { useContacts, useLogContact, useMyListings, useUpdateListingStatus } from '@/hooks/use-api';
 import { getErrorMessage } from '@/lib/api';
-import { formatDate, formatPrice, listingCover } from '@/lib/utils';
+import { cn, formatDate, formatPrice, listingCover } from '@/lib/utils';
 import { useToast } from '@/providers/toast-provider';
 
-type Sort = 'recent' | 'price_desc' | 'oldest';
+// Layout follows the app's SoldBooksScreen; data comes from sold listings and the contacts ledger.
+
+const SORTS = [
+  { value: 'recent', label: 'Recent' },
+  { value: 'price_desc', label: 'Price (High to Low)' },
+  { value: 'date_asc', label: 'Date (Oldest First)' },
+] as const;
 
 export default function SoldBooksPage() {
   const toast = useToast();
@@ -28,36 +42,44 @@ export default function SoldBooksPage() {
   const logContact = useLogContact();
   const updateStatus = useUpdateListingStatus();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<Sort>('recent');
+  const [sort, setSort] = useState<(typeof SORTS)[number]['value']>('recent');
+  const [sortOpen, setSortOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [form, setForm] = useState({ listing: '', buyer: '', price: '' });
 
-  const soldListings = useMemo(() => listings.filter((l) => l.status === 'SOLD'), [listings]);
+  const sold = useMemo(() => listings.filter((l) => l.status === 'SOLD'), [listings]);
   const available = useMemo(() => listings.filter((l) => l.status === 'AVAILABLE'), [listings]);
-  const sales = useMemo(() => contacts.filter((c) => c.deal_type === 'SOLD'), [contacts]);
-  // Match each sold listing to the most recent buyer recorded for it in the ledger, if any.
   const saleByTitle = useMemo(() => {
-    const map = new Map<string, (typeof sales)[number]>();
-    for (const sale of sales) if (!map.has(sale.book_title)) map.set(sale.book_title, sale);
+    const map = new Map<string, (typeof contacts)[number]>();
+    for (const c of contacts)
+      if (c.deal_type === 'SOLD' && !map.has(c.book_title)) map.set(c.book_title, c);
     return map;
-  }, [sales]);
+  }, [contacts]);
 
-  const shown = useMemo(() => {
+  const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = soldListings.filter(
-      (l) =>
-        !q ||
-        l.book.title.toLowerCase().includes(q) ||
-        saleByTitle.get(l.book.title)?.contact_person_name.toLowerCase().includes(q)
-    );
-    return [...list].sort((a, b) => {
-      if (sort === 'price_desc') return parseFloat(b.price) - parseFloat(a.price);
-      const diff = new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-      return sort === 'oldest' ? -diff : diff;
+    const list = sold
+      .map((l) => {
+        const sale = saleByTitle.get(l.book.title);
+        return {
+          listing: l,
+          buyer: sale?.contact_person_name,
+          price: parseFloat(sale?.price_recorded ?? l.price),
+          date: sale?.transaction_date ?? l.updated_at,
+        };
+      })
+      .filter(
+        (r) =>
+          !q || r.listing.book.title.toLowerCase().includes(q) || r.buyer?.toLowerCase().includes(q)
+      );
+    return list.sort((a, b) => {
+      if (sort === 'price_desc') return b.price - a.price;
+      const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      return sort === 'date_asc' ? -diff : diff;
     });
-  }, [soldListings, saleByTitle, query, sort]);
+  }, [sold, saleByTitle, query, sort]);
 
-  const earned = soldListings.reduce((sum, l) => sum + parseFloat(l.price), 0);
+  const totalValue = rows.reduce((s, r) => s + r.price, 0);
 
   const record = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,110 +103,142 @@ export default function SoldBooksPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Sold books"
-        description="Books you’ve sold and what you’ve earned."
-        action={
+    <>
+      <ScreenHeader
+        title="Sold Books"
+        fallback="/profile"
+        right={
           available.length > 0 && (
-            <Button onClick={() => setRecording(true)}>
-              <Plus className="h-4 w-4" /> Record a sale
-            </Button>
+            <button
+              onClick={() => setRecording(true)}
+              aria-label="Record a sale"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white"
+            >
+              <IoAdd size={22} />
+            </button>
           )
         }
       />
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-        <Card className="p-4">
-          <PackageCheck className="h-5 w-5 text-brand-primary" />
-          <p className="mt-2 text-2xl font-extrabold text-slate-900">{soldListings.length}</p>
-          <p className="text-xs text-slate-500">Books sold</p>
-        </Card>
-        <Card className="p-4">
-          <IndianRupee className="h-5 w-5 text-emerald-600" />
-          <p className="mt-2 text-2xl font-extrabold text-slate-900">{formatPrice(earned)}</p>
-          <p className="text-xs text-slate-500">Total earned</p>
-        </Card>
-        <Card className="col-span-2 p-4 md:col-span-1">
-          <UserRound className="h-5 w-5 text-sky-600" />
-          <p className="mt-2 text-2xl font-extrabold text-slate-900">{sales.length}</p>
-          <p className="text-xs text-slate-500">Buyers recorded</p>
-        </Card>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by title or buyer"
-            aria-label="Search sold books"
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-brand-primary focus:outline-none"
-          />
+      <div className="space-y-4 px-6">
+        <div className="flex items-center gap-2">
+          <div className="flex h-12 flex-1 items-center gap-2 rounded-2xl bg-white px-4 shadow-card">
+            <IoSearchOutline size={18} className="text-muted" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search title or buyer..."
+              aria-label="Search sold books"
+              className="h-full flex-1 bg-transparent text-sm focus:outline-none"
+            />
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setSortOpen((v) => !v)}
+              aria-label="Sort"
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-ink bg-white text-ink"
+            >
+              <IoFilterOutline size={20} />
+            </button>
+            {sortOpen && (
+              <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-2xl bg-white py-1 shadow-float">
+                {SORTS.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => {
+                      setSort(s.value);
+                      setSortOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-between px-4 py-2.5 text-left text-sm',
+                      sort === s.value ? 'bg-secondary font-semibold text-primary' : 'text-text'
+                    )}
+                  >
+                    {s.label} {sort === s.value && <IoCheckmark size={16} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as Sort)}
-          aria-label="Sort sold books"
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
-        >
-          <option value="recent">Most recent</option>
-          <option value="price_desc">Price: high to low</option>
-          <option value="oldest">Oldest first</option>
-        </select>
-      </div>
 
-      {isLoading ? (
-        <Skeleton className="h-40" />
-      ) : shown.length === 0 ? (
-        <EmptyState
-          icon={PackageCheck}
-          title={soldListings.length ? 'No sold books match your search' : 'No sold books yet'}
-          description="When you mark a listing as sold it will appear here."
-          action={
-            <Link href="/dashboard/listings">
-              <Button variant="outline">Manage listings</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
-          {shown.map((l) => {
-            const sale = saleByTitle.get(l.book.title);
-            return (
-              <li
-                key={l.id}
-                className="flex gap-4 rounded-2xl border border-slate-100 bg-white p-3"
-              >
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-card">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-primary">
+              <IoCubeOutline size={20} />
+            </span>
+            <span>
+              <span className="block text-[11px] text-muted">Total Sold</span>
+              <span className="font-heading text-lg font-bold text-ink">{sold.length}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-card">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-app-yellow-light text-[#F59E0B]">
+              <IoWalletOutline size={20} />
+            </span>
+            <span>
+              <span className="block text-[11px] text-muted">Total Value</span>
+              <span className="font-heading text-lg font-bold text-ink">
+                {formatPrice(totalValue)}
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-32" />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={IoBagHandleOutline}
+            title={sold.length ? 'No matches' : 'No Sold Books Yet'}
+            description="When you mark a listing as sold, it will show up here."
+            action={
+              available.length > 0 && (
+                <Button size="md" onClick={() => setRecording(true)}>
+                  <IoAdd size={18} /> Record a Sale
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2">
+            {rows.map(({ listing: l, buyer, price, date }) => (
+              <li key={l.id}>
                 <Link
                   href={`/listings/${l.id}`}
-                  className="h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100"
+                  className="flex gap-4 rounded-2xl bg-white p-4 shadow-card"
                 >
-                  <BookCover src={listingCover(l)} alt={l.book.title} />
+                  <span className="h-[100px] w-[70px] shrink-0 overflow-hidden rounded-lg bg-app-bg">
+                    <BookCover src={listingCover(l)} alt={l.book.title} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-heading line-clamp-2 block text-[15px] font-semibold text-ink">
+                      {l.book.title}
+                    </span>
+                    <span className="mt-1.5 flex items-center gap-1 text-xs text-muted">
+                      <IoPersonCircleOutline size={16} />{' '}
+                      {buyer ? `Sold to ${buyer}` : 'Buyer not recorded'}
+                    </span>
+                    <span className="mt-3 flex">
+                      <span className="pr-6">
+                        <span className="block text-[10px] text-muted">Price</span>
+                        <span className="font-heading text-base font-bold text-ink">
+                          {formatPrice(price)}
+                        </span>
+                      </span>
+                      <span className="border-l border-gray-heavy/60 pl-4">
+                        <span className="block text-[10px] text-muted">Sold On</span>
+                        <span className="text-sm text-text">{formatDate(date)}</span>
+                      </span>
+                    </span>
+                  </span>
                 </Link>
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 font-bold text-slate-900">{l.book.title}</p>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                    <UserRound className="h-3.5 w-3.5" />
-                    {sale ? `Sold to ${sale.contact_person_name}` : 'Buyer not recorded'}
-                  </p>
-                  <div className="mt-2 flex justify-between text-sm">
-                    <span className="font-extrabold text-brand-dark">
-                      {formatPrice(sale?.price_recorded ?? l.price)}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      {formatDate(sale?.transaction_date ?? l.updated_at)}
-                    </span>
-                  </div>
-                </div>
               </li>
-            );
-          })}
-        </ul>
-      )}
+            ))}
+          </ul>
+        )}
+      </div>
 
-      <Modal open={recording} onClose={() => setRecording(false)} title="Record a sale">
+      <Modal open={recording} onClose={() => setRecording(false)} title="Record a Sale">
         <form onSubmit={record} className="space-y-4">
           <Select
             label="Book"
@@ -206,28 +260,37 @@ export default function SoldBooksPage() {
             ))}
           </Select>
           <Input
-            label="Buyer name"
+            label="Buyer Name"
             value={form.buyer}
             onChange={(e) => setForm({ ...form, buyer: e.target.value })}
             required
           />
           <Input
-            label="Final price (₹)"
+            label="Final Price (₹)"
             type="number"
             min={0}
             value={form.price}
             onChange={(e) => setForm({ ...form, price: e.target.value })}
           />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setRecording(false)}>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setRecording(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" loading={logContact.isPending || updateStatus.isPending}>
-              Save sale
+            <Button
+              type="submit"
+              className="flex-1"
+              loading={logContact.isPending || updateStatus.isPending}
+            >
+              Save Sale
             </Button>
           </div>
         </form>
       </Modal>
-    </div>
+    </>
   );
 }

@@ -40,18 +40,15 @@ const FAQS = [
 
 export default function FaqsPage() {
   return (
-    <InfoPage
-      title="Frequently asked questions"
-      intro="Quick answers about buying and selling on Bookmart."
-    >
-      <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100 bg-white">
+    <InfoPage title="FAQs" intro="Quick answers about buying and selling on Bookmart.">
+      <div className="divide-y divide-gray-light rounded-2xl bg-white shadow-card">
         {FAQS.map(({ q, a }) => (
           <details key={q} className="group p-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-slate-900">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-ink">
               {q}
-              <span className="text-xl text-brand-primary transition group-open:rotate-45">+</span>
+              <span className="text-xl text-primary transition group-open:rotate-45">+</span>
             </summary>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">{a}</p>
+            <p className="mt-2 text-sm leading-relaxed text-text">{a}</p>
           </details>
         ))}
       </div>

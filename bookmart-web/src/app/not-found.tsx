@@ -1,19 +1,21 @@
-import { BookX } from 'lucide-react';
 import Link from 'next/link';
+import { IoBookOutline } from 'react-icons/io5';
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-center">
-      <BookX className="h-14 w-14 text-brand-primary" />
-      <h1 className="mt-4 text-3xl font-extrabold text-slate-900">Page not found</h1>
-      <p className="mt-2 text-sm text-slate-500">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-app-bg px-6 text-center">
+      <span className="flex h-24 w-24 items-center justify-center rounded-full bg-white text-primary shadow-card">
+        <IoBookOutline size={44} />
+      </span>
+      <h1 className="mt-6 text-2xl font-bold text-ink">Page not found</h1>
+      <p className="mt-2 text-sm text-muted">
         This page has been checked out. Try the home page instead.
       </p>
       <Link
         href="/"
-        className="mt-6 rounded-xl bg-brand-primary px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark"
+        className="font-heading mt-8 flex h-14 items-center rounded-full bg-primary px-10 text-base font-bold text-white"
       >
-        Back to home
+        Back to Home
       </Link>
     </div>
   );

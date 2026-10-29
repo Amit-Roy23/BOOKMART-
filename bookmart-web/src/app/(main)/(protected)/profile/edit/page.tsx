@@ -1,10 +1,20 @@
 'use client';
 
-import { Camera } from 'lucide-react';
+/* eslint-disable @next/next/no-img-element -- local object URL / backend media */
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import {
+  IoCalendarOutline,
+  IoCallOutline,
+  IoCamera,
+  IoLocationOutline,
+  IoMailOutline,
+  IoPerson,
+  IoPersonOutline,
+} from 'react-icons/io5';
+import { ScreenHeader } from '@/components/app/screen-header';
 import { CollegePicker } from '@/components/profile/college-picker';
-import { Avatar, Button, Card, Input, PageHeader, Textarea } from '@/components/ui/primitives';
+import { Button, Input, Textarea } from '@/components/ui/primitives';
 import { api, getErrorMessage } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/endpoints';
 import { prepareImage } from '@/lib/image';
@@ -14,6 +24,7 @@ import type { College } from '@/types/api';
 
 const PHONE_RE = /^\+?[1-9]\d{7,14}$/;
 
+/** The app's EditProfileScreen. */
 export default function EditProfilePage() {
   const router = useRouter();
   const toast = useToast();
@@ -21,8 +32,8 @@ export default function EditProfilePage() {
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
   const [phone, setPhone] = useState(profile?.phone_number ?? '');
   const [dob, setDob] = useState(profile?.date_of_birth ?? '');
-  const [bio, setBio] = useState('');
   const [city, setCity] = useState(profile?.city_location ?? '');
+  const [bio, setBio] = useState('');
   const [college, setCollege] = useState<College | null>(profile?.college ?? null);
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -35,8 +46,7 @@ export default function EditProfilePage() {
     [preview]
   );
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const save = async () => {
     if (!fullName.trim()) return toast.error('Full name is required.');
     const cleanPhone = phone.replace(/[\s-]/g, '');
     if (cleanPhone && !PHONE_RE.test(cleanPhone)) {
@@ -46,8 +56,8 @@ export default function EditProfilePage() {
     form.append('full_name', fullName.trim());
     form.append('phone_number', cleanPhone);
     if (dob) form.append('date_of_birth', dob);
-    if (bio.trim()) form.append('bio', bio.trim());
     if (city.trim()) form.append('city_location', city.trim());
+    if (bio.trim()) form.append('bio', bio.trim());
     if (college) form.append('college', String(college.id));
     if (image) form.append('image', image);
 
@@ -55,7 +65,7 @@ export default function EditProfilePage() {
     try {
       await api.patch(ENDPOINTS.CORE.PROFILE_ME, form);
       await refreshProfile();
-      toast.success('Profile updated');
+      toast.success('Profile updated successfully');
       router.push('/profile');
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -64,73 +74,88 @@ export default function EditProfilePage() {
     }
   };
 
-  return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader title="Edit profile" description="Buyers see your name, photo and college." />
-      <form onSubmit={save} className="space-y-5">
-        <Card className="flex items-center gap-5">
-          <div className="relative">
-            <Avatar src={preview ?? profile?.image} name={fullName} size={88} />
-            <label className="absolute -bottom-1 -right-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-brand-primary text-white shadow">
-              <Camera className="h-4 w-4" />
-              <input
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                aria-label="Upload profile photo"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    const prepared = await prepareImage(file);
-                    setImage(prepared);
-                    setPreview(URL.createObjectURL(prepared));
-                  } catch (err) {
-                    toast.error(getErrorMessage(err));
-                  }
-                }}
-              />
-            </label>
-          </div>
-          <div>
-            <p className="font-bold text-slate-900">Profile photo</p>
-            <p className="text-xs text-slate-500">JPG or PNG, up to 5 MB.</p>
-          </div>
-        </Card>
+  const photo = preview ?? profile?.image;
 
-        <Card className="space-y-4">
+  return (
+    <div className="mx-auto max-w-xl pb-32">
+      <ScreenHeader title="Edit Profile" fallback="/profile" />
+      <div className="space-y-6 px-6">
+        <div className="flex flex-col items-center">
+          <label className="relative cursor-pointer">
+            <span className="flex h-[100px] w-[100px] items-center justify-center overflow-hidden rounded-full bg-darker-teal text-primary">
+              {photo ? (
+                <img src={photo} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <IoPerson size={48} />
+              )}
+            </span>
+            <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-primary text-white">
+              <IoCamera size={14} />
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              aria-label="Upload profile photo"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const prepared = await prepareImage(file);
+                  setImage(prepared);
+                  setPreview(URL.createObjectURL(prepared));
+                } catch (err) {
+                  toast.error(getErrorMessage(err));
+                }
+              }}
+            />
+          </label>
+          <span className="font-heading mt-3 text-sm font-semibold text-primary">
+            Change Profile Photo
+          </span>
+        </div>
+
+        <section className="space-y-4 rounded-3xl bg-white p-6 shadow-card">
           <Input
-            label="Full name"
+            label="Full Name"
+            icon={<IoPersonOutline size={18} />}
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            required
           />
           <Input
-            label="Email"
+            label="Email Address"
+            icon={<IoMailOutline size={18} />}
             value={profile?.email ?? ''}
             disabled
-            hint="Email can’t be changed."
           />
           <Input
-            label="Phone number"
+            label="Phone Number"
             type="tel"
+            icon={<IoCallOutline size={18} />}
             placeholder="+919876543210"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            hint="Buyers contact you on WhatsApp at this number."
           />
           <Input
-            label="Date of birth"
+            label="Date of Birth"
             type="date"
+            icon={<IoCalendarOutline size={18} />}
             value={dob ?? ''}
             onChange={(e) => setDob(e.target.value)}
           />
           <Input
-            label="City / area"
+            label="Location"
+            icon={<IoLocationOutline size={18} />}
             placeholder="e.g. Salt Lake, Kolkata"
             value={city}
             onChange={(e) => setCity(e.target.value)}
           />
+          <div>
+            <p className="font-heading mb-1 text-sm font-semibold text-muted">
+              College / University
+            </p>
+            <CollegePicker value={college} onChange={setCollege} />
+          </div>
           <Textarea
             label="Bio"
             placeholder="Tell others a little about yourself"
@@ -139,29 +164,16 @@ export default function EditProfilePage() {
             onChange={(e) => setBio(e.target.value)}
             hint="Leave empty to keep your current bio."
           />
-        </Card>
+        </section>
+      </div>
 
-        <Card className="space-y-3">
-          <div>
-            <p className="font-bold text-slate-900">College</p>
-            <p className="text-xs text-slate-500">
-              {college
-                ? `Selected: ${college.name}`
-                : 'Helps students from your college find your books.'}
-            </p>
-          </div>
-          <CollegePicker value={college} onChange={setCollege} />
-        </Card>
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={saving}>
-            Save changes
+      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
+        <div className="mx-auto max-w-xl rounded-3xl bg-white p-4 shadow-float">
+          <Button className="w-full" onClick={save} loading={saving}>
+            Save Changes
           </Button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
