@@ -42,15 +42,12 @@ class BookImportCategorizationTests(APITestCase):
         self.assertEqual(book.authors.first().name, "Thomas H. Cormen")
         self.assertEqual(book.published_date, date(1990, 1, 1))
 
-        self.assertEqual(book.genres.count(), 3)
-        genres = list(book.genres.values_list("name", flat=True))
-        self.assertIn("Algorithms", genres)
-        self.assertIn("Computer programming", genres)
-        self.assertIn("Mathematics", genres)
+        # Subjects collapse into the first matching app category ("Computer programming" -> Academic).
+        self.assertEqual(list(book.genres.values_list("name", flat=True)), ["Academic"])
+        self.assertEqual(Genre.objects.get(name="Academic").slug, "academic")
 
-        algorithms_genre = Genre.objects.get(name="Algorithms")
-        self.assertEqual(algorithms_genre.slug, "algorithms")
-
+        # Genres whose names slugify the same get a numbered suffix.
+        Genre.objects.create(name="Algorithms")
         dup_genre = Genre(name="Algorithms.")
         dup_genre.save()
         self.assertEqual(dup_genre.slug, "algorithms-1")
@@ -97,14 +94,14 @@ class BookImportCategorizationTests(APITestCase):
         self.assertEqual(response.data["title"], "Introduction to Algorithms")
         self.assertEqual(response.data["published_year"], 1990)
         self.assertEqual(response.data["authors"], ["Thomas H. Cormen"])
-        self.assertEqual(response.data["genres"], ["Algorithms", "Mathematics"])
+        self.assertEqual(response.data["genres"], ["Academic"])
 
     @patch("apps.books.services.get_book_document")
     @patch("apps.books.services.get_author_document")
     def test_import_book_with_custom_genre(
         self, mock_get_author_document, mock_get_book_document
     ):
-        """Verify importing a book with a custom manual genre attaches the custom genre."""
+        """Verify a custom manual genre overrides subjects and is normalized to an app category."""
         self.client.force_authenticate(user=self.user)
         mock_get_book_document.return_value = {
             "title": "Clean Code",
@@ -122,8 +119,8 @@ class BookImportCategorizationTests(APITestCase):
         response = self.client.post(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("Software Engineering Custom", response.data["genres"])
-        self.assertIn("Software", response.data["genres"])
+        # "Software Engineering Custom" contains "engineering", so it is filed under Academic.
+        self.assertEqual(response.data["genres"], ["Academic"])
 
     @patch("apps.books.services.get_book_document")
     @patch("apps.books.services.get_author_document")
@@ -240,7 +237,7 @@ class BookImportCategorizationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["title"], "My Custom Unique Book")
         self.assertEqual(response.data["authors"], ["Amit Roy"])
-        self.assertIn("Self Help Custom", response.data["genres"])
+        self.assertEqual(response.data["genres"], ["Self Help"])
         self.assertTrue(response.data["is_local"])
 
     @patch("apps.books.services.requests.get")
@@ -271,7 +268,7 @@ class BookImportCategorizationTests(APITestCase):
         local_book = next(b for b in response.data if b["title"] == "Python Deep Learning")
         self.assertTrue(local_book["is_local"])
         self.assertEqual(local_book["authors"], ["Jane Smith"])
-        self.assertIn("Artificial Intelligence", local_book["genres"])
+        self.assertEqual(local_book["genres"], ["Others"])
 
     @patch("apps.books.services.requests.get")
     def test_search_books_local_first_does_not_call_openlibrary(self, mock_requests_get):
@@ -312,8 +309,9 @@ class GenreViewSetTests(APITestCase):
             full_name="Seller Two",
             password="testpassword123",
         )
+        # "Competitive Exams" input is normalized to the canonical Academic genre.
         self.genre = Genre.objects.create(
-            name="Competitive Exams",
+            name="Academic",
             subtitle="Prepare to Succeed",
             icon="🚀",
         )
@@ -359,7 +357,7 @@ class GenreViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["name"], "Competitive Exams")
+        self.assertEqual(response.data["results"][0]["name"], "Academic")
         self.assertEqual(response.data["results"][0]["subtitle"], "Prepare to Succeed")
 
     def test_retrieve_genre_detail_ranked_by_price(self):
@@ -367,7 +365,7 @@ class GenreViewSetTests(APITestCase):
         url = f"/api/v1/book/genres/{self.genre.slug}/"
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["name"], "Competitive Exams")
+        self.assertEqual(response.data["name"], "Academic")
         self.assertEqual(response.data["subtitle"], "Prepare to Succeed")
 
         books = response.data["books"]
@@ -490,9 +488,19 @@ class AuthorViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], "Author One")
 
-    def test_enrich_author_details(self):
+    @patch("apps.books.services.requests.get")
+    def test_enrich_author_details(self, mock_get):
         from apps.books.services import enrich_author_details
 
+        # Wikipedia summary lookup, mocked so the test does not depend on the network.
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "type": "standard",
+            "title": "Rabindranath Tagore",
+            "thumbnail": {"source": "https://upload.wikimedia.org/tagore.jpg"},
+            "extract": "Rabindranath Tagore was a Bengali poet, writer and philosopher.",
+            "description": "Bengali poet and polymath",
+        }
         new_author = Author.objects.create(name="Rabindranath Tagore")
         enriched = enrich_author_details(new_author, book_title="Gitanjali", genre="Poetry")
         self.assertTrue(len(enriched.bio) > 0)

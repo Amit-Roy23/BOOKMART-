@@ -165,7 +165,7 @@ class BookListingTests(APITestCase):
         self.assertIsNotNone(data["listing_images"][0]["image_url"])
 
     def test_create_listing_with_custom_genre(self):
-        """Ensure listing created with title, author, and genre assigns genre to newly created book."""
+        """Ensure a custom genre is normalized into one of the 8 app categories on the new book."""
         self.client.force_authenticate(user=self.seller)
         url = "/api/v1/marketplace/listings/"
         data = {
@@ -183,7 +183,8 @@ class BookListingTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         book = Book.objects.get(title="Designing Data-Intensive Applications")
-        self.assertTrue(book.genres.filter(name="Distributed Systems").exists())
+        # "Distributed Systems" matches none of the category keywords, so it lands in Others.
+        self.assertEqual(list(book.genres.values_list("name", flat=True)), ["Others"])
 
 
 class BookListingUpdateTests(APITestCase):
