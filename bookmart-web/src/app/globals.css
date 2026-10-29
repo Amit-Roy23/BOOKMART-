@@ -1,25 +1,21 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   --background: #ffffff;
-  --foreground: #06202B;
+  --foreground: #06202b;
 }
 
 @theme inline {
-  --font-heading: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-body: var(--font-manrope), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-heading:
+    var(--font-montserrat), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji';
+  --font-body:
+    var(--font-manrope), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
   --color-brand-primary: #008080;
   --color-brand-dark: #006666;
-  --color-brand-light: #E6F5F5;
-  --color-brand-border: #B3D9D9;
-  --color-teal-primary: #0B8A8F;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-brand-light: #e6f5f5;
+  --color-brand-border: #b3d9d9;
+  --color-teal-primary: #0b8a8f;
 }
 
 html,
@@ -39,7 +35,12 @@ body::-webkit-scrollbar {
   display: none;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading), Arial, Helvetica, sans-serif;
 }
 
@@ -69,7 +70,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {

@@ -157,8 +157,11 @@ def get_nearby_listings(
     )
 
     # --- Step 5: Annotate with Haversine distance ---
+    # Qualify the columns: select_related("seller__profile") joins core_profile,
+    # which also has latitude/longitude, making bare names ambiguous.
+    table = BookListing._meta.db_table
     distance_expr = haversine_distance_sql(
-        "latitude", "longitude", center_lat, center_lng
+        f"{table}.latitude", f"{table}.longitude", center_lat, center_lng
     )
     qs = qs.annotate(distance_km=distance_expr)
 

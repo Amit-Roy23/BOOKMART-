@@ -774,3 +774,41 @@ class BoostPaymentTests(APITestCase):
 
 
 
+
+
+class NearbyListingsTests(APITestCase):
+    def setUp(self):
+        self.seller = User.objects.create_user(
+            email="nearby-seller@example.com",
+            full_name="Nearby Seller",
+            password="testpassword123",
+        )
+        self.buyer = User.objects.create_user(
+            email="nearby-buyer@example.com",
+            full_name="Nearby Buyer",
+            password="testpassword123",
+        )
+        # Profiles also carry latitude/longitude; the query joins them via select_related.
+        self.seller.profile.latitude = "22.894300"
+        self.seller.profile.longitude = "88.423900"
+        self.seller.profile.save()
+
+        book = Book.objects.create(title="Nearby Book")
+        self.close = BookListing.objects.create(
+            book=book, seller=self.seller, price="100.00", latitude="22.895000", longitude="88.424000"
+        )
+        BookListing.objects.create(
+            book=book, seller=self.seller, price="120.00", latitude="28.613900", longitude="77.209000"
+        )
+
+    def test_nearby_returns_listings_within_radius_with_distance(self):
+        self.client.force_authenticate(user=self.buyer)
+        response = self.client.get(
+            "/api/v1/marketplace/listings/nearby/",
+            {"lat": 22.8943, "lng": 88.4239, "radius": 10},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        result = response.data["results"][0]
+        self.assertEqual(result["id"], self.close.id)
+        self.assertLess(result["distance_km"], 1)
