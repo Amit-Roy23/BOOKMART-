@@ -93,7 +93,11 @@ export function getErrorMessage(
   if (!axios.isAxiosError(error)) {
     return error instanceof Error ? error.message : fallback;
   }
-  if (!error.response) return 'Cannot reach the Bookmart server. Check your connection.';
+  if (!error.response) {
+    return process.env.NODE_ENV === 'development'
+      ? `Cannot reach the Bookmart server at ${API_URL}. Is the backend running?`
+      : 'Cannot reach the Bookmart server. Check your connection.';
+  }
   const data = error.response.data as unknown;
   if (typeof data === 'string') return data.length < 200 ? data : fallback;
   if (Array.isArray(data)) return String(data[0] ?? fallback);

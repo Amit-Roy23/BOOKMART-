@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Montserrat, Manrope } from 'next/font/google';
 import { Providers } from '@/providers';
 import './globals.css';
@@ -16,6 +16,9 @@ const manrope = Manrope({
   variable: '--font-manrope',
   display: 'swap',
 });
+
+// The app has no dark theme; opt out of browser auto-dark (Chrome/Brave night mode).
+export const viewport: Viewport = { colorScheme: 'only light', themeColor: '#f4f9f9' };
 
 export const metadata: Metadata = {
   title: {
