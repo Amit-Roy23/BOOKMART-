@@ -52,8 +52,7 @@ const SponsoredCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const SponsoredSection: React.FC<SponsoredSectionProps> = memo(({ title = "Trending Now", books, onBookPress }) => {

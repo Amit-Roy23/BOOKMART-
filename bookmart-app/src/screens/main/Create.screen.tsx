@@ -764,6 +764,12 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["userProfile"] });
       queryClient.invalidateQueries({ queryKey: ["all-listings"] });
+      if (editListingId) {
+        queryClient.invalidateQueries({ queryKey: ["listing", editListingId] });
+        queryClient.invalidateQueries({ queryKey: ["edit-listing", editListingId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["my-listings"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-views"] });
       setShowSuccess(true);
     },
     onError: (err: any) => showToast(err.response?.data?.detail || "Failed to update book."),
@@ -815,6 +821,24 @@ const normalizeCategory = (catStr: string | null | undefined): string => {
         formattedPhone = "+91" + formattedPhone.replace(/^(0|91|\+91)/, "");
       }
       formData.append("phone_number", formattedPhone);
+    }
+
+    // Handle removed images in edit mode
+    if (editListingId && editListingData?.listing_images) {
+      editListingData.listing_images.forEach((img: any) => {
+        let index = -1;
+        const lbl = String(img.label || "").toUpperCase();
+        if (lbl === "FRONT_COVER") index = 0;
+        else if (lbl === "BACK_COVER") index = 1;
+        else if (lbl === "SPINE") index = 2;
+        else if (lbl === "MIDDLE_PAGE") index = 3;
+        else if (lbl === "DAMAGE_1") index = 4;
+        else if (lbl === "DAMAGE_2") index = 5;
+
+        if (index !== -1 && !images[index]) {
+          formData.append("removed_image_ids", String(img.id));
+        }
+      });
     }
 
     const appendImageFile = (key: string, uri: string) => {

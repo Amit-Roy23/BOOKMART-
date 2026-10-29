@@ -56,8 +56,7 @@ const MyListingCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const MyListingsSection: React.FC<MyListingsSectionProps> = memo(

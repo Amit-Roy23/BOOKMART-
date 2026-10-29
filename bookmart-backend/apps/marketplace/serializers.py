@@ -94,7 +94,7 @@ class BookListingImageSerializer(serializers.ModelSerializer):
 class BookListingResponseSerializer(serializers.ModelSerializer):
     book = BookNestedSerializer(read_only=True)
     seller = SellerNestedSerializer(read_only=True)
-    listing_images = BookListingImageSerializer(many=True, read_only=True)
+    listing_images = serializers.SerializerMethodField()
     favorite_count = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     is_boosted = serializers.SerializerMethodField()
@@ -123,6 +123,20 @@ class BookListingResponseSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    @extend_schema_field(BookListingImageSerializer(many=True))
+    def get_listing_images(self, obj):
+        order_map = {
+            "FRONT_COVER": 0,
+            "BACK_COVER": 1,
+            "SPINE": 2,
+            "MIDDLE_PAGE": 3,
+            "DAMAGE_1": 4,
+            "DAMAGE_2": 5,
+        }
+        images = list(obj.listing_images.all())
+        images.sort(key=lambda img: order_map.get(str(img.label).upper(), 99))
+        return BookListingImageSerializer(images, many=True, context=self.context).data
 
     @extend_schema_field(serializers.IntegerField)
     def get_favorite_count(self, obj):

@@ -19,7 +19,7 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, router } from "expo-router";
+import { useNavigation, router, useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
@@ -69,6 +69,13 @@ const HomeScreen = () => {
     },
   });
 
+  useFocusEffect(
+    useCallback(() => {
+      refetchListings();
+      refetchProfile();
+    }, [refetchListings, refetchProfile])
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -102,6 +109,7 @@ const HomeScreen = () => {
         "Unknown Author",
       price: typeof item.price === "number" ? item.price : parseFloat(item.price) || 0,
       coverUri:
+        item.listing_images?.find((img: any) => String(img.label || "").toUpperCase() === "FRONT_COVER")?.image_url ||
         item.listing_images?.[0]?.image_url ||
         item.book?.cover_url ||
         "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",

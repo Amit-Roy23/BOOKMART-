@@ -49,8 +49,7 @@ const SmallGridCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const PeopleViewing: React.FC<PeopleViewingProps> = memo(

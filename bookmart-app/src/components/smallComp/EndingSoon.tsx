@@ -50,8 +50,7 @@ const MiniRowCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const EndingSoon: React.FC<EndingSoonProps> = memo(({ title = "Ending Soon", books, onBookPress, onSeeAllPress }) => {
