@@ -3,6 +3,8 @@ from datetime import date
 import logging
 import re
 import time
+import urllib.parse
+from decimal import Decimal
 
 import requests
 from django.db import transaction
@@ -225,10 +227,6 @@ def get_author_document(author_key: str):
     url = f"{OPENLIBRARY_BASE_URL}{clean_key}.json"
     return _fetch_openlibrary_resource(url, resource_type="author", resource_key=author_key)
 
-
-import unicodedata
-import urllib.parse
-from decimal import Decimal
 
 def fetch_real_author_profile(name: str, book_title: str = None, genre: str = None, author_doc: dict = None) -> dict:
     """
