@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bookmart Web
 
-## Getting Started
+The web version of Bookmart, built with Next.js 16 (App Router), React 19, Tailwind CSS v4 and
+TanStack Query. It talks to the same `bookmart-backend` REST API as the mobile app (`bookmart-app`),
+so accounts, listings, favourites and notifications are shared between web and mobile.
 
-First, run the development server:
+## Getting started
 
 ```bash
+cp .env.example .env.local   # point NEXT_PUBLIC_API_URL at your backend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). The backend must allow the web origin in
+`CORS_ALLOWED_ORIGINS` (`http://localhost:3000` is allowed by default).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable              | Default                          | Description                                  |
+| --------------------- | -------------------------------- | -------------------------------------------- |
+| `NEXT_PUBLIC_API_URL` | `http://127.0.0.1:8000/api/v1`   | Backend API base URL, inlined at build time. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Features
 
-## Learn More
+Everything the mobile app does, against the same endpoints:
 
-To learn more about Next.js, take a look at the following resources:
+- **Auth** — register, email OTP verification, login, forgot password (OTP reset), onboarding
+  (role, college, reading preference). JWTs are refreshed automatically on 401.
+- **Discover** — personalised home feed (`/home/`), search with condition/genre/tag filters and
+  sorting, genres, authors, books near you on a map (`/marketplace/listings/nearby/`).
+- **Listing page** — photo gallery, WhatsApp contact (logged to the contacts ledger), favourites,
+  book reviews, seller rating, report listing.
+- **Selling** — 3-step listing flow with catalog/OpenLibrary lookup, the 4 required photos plus
+  damage photos, a map pickup-location picker, and editing existing listings.
+- **Seller dashboard** — manage listings (mark sold, delete, boost), analytics, boost plans with
+  the payment initiate/confirm flow, sold books with “record a sale”.
+- **Account** — profile, edit profile (photo, phone, college), saved address, notifications,
+  contacts, favourites, book requests, reports, seller public pages and seller reviews.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+  app/(auth)/          login, register, verify-email, forgot-password, onboarding
+  app/(main)/          public pages (home, categories, authors, requests, info pages)
+  app/(main)/(protected)/  pages that require login
+  components/          UI primitives, layout, listing, catalog, map components
+  hooks/use-api.ts     all React Query hooks for backend reads and writes
+  lib/api.ts           axios client, token storage and refresh
+  lib/endpoints.ts     endpoint map (mirrors bookmart-app/src/api/endpoints.ts)
+  types/api.ts         types mirroring the backend serializers
+```
 
-## Deploy on Vercel
+## Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` — development server
+- `npm run build` / `npm start` — production build and server
+- `npm run lint` — ESLint

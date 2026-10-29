@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Montserrat, Manrope } from 'next/font/google';
+import { Providers } from '@/providers';
 import './globals.css';
 
 const montserrat = Montserrat({
@@ -17,7 +18,10 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'Bookmart | Buy & Sell Used Books Near You',
+  title: {
+    default: 'Bookmart | Buy & Sell Used Books Near You',
+    template: '%s | Bookmart',
+  },
   description:
     'The ultimate peer-to-peer marketplace for pre-loved books. Buy cheap textbooks, novel editions, and rare literature directly from students and readers in your local community.',
   keywords: [
@@ -29,8 +33,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'Bookmart | Buy & Sell Used Books Near You',
-    description:
-      'Save up to 70% on textbooks and literature. List your books in seconds via barcode scan.',
+    description: 'Save up to 70% on textbooks and literature. List your books in seconds.',
     type: 'website',
     locale: 'en_IN',
     url: 'https://bookmart.gourabacharjee.website',
@@ -45,7 +48,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${montserrat.variable} ${manrope.variable} font-body h-full antialiased`}>{children}</body>
+      <body className={`${montserrat.variable} ${manrope.variable} font-body antialiased`}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
