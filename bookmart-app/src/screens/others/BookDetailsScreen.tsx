@@ -122,6 +122,7 @@ const BookDetailsScreen = () => {
         bookId: String(listingData.book.id),
         title: listingData.book.title,
         coverUri:
+          listingData.listing_images?.find((img: any) => String(img.label || "").toUpperCase() === "FRONT_COVER")?.image_url ||
           listingData.listing_images?.[0]?.image_url ||
           listingData.book.cover_url ||
           "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400&h=600&fit=crop",
@@ -152,7 +153,20 @@ const BookDetailsScreen = () => {
 
   const imagesToDisplay = useMemo(() => {
     if (listingData?.listing_images && listingData.listing_images.length > 0) {
-      return listingData.listing_images.map((img: any) => img.image_url);
+      const orderMap: Record<string, number> = {
+        FRONT_COVER: 0,
+        BACK_COVER: 1,
+        SPINE: 2,
+        MIDDLE_PAGE: 3,
+        DAMAGE_1: 4,
+        DAMAGE_2: 5,
+      };
+      const sorted = [...listingData.listing_images].sort(
+        (a: any, b: any) =>
+          (orderMap[String(a.label || "").toUpperCase()] ?? 99) -
+          (orderMap[String(b.label || "").toUpperCase()] ?? 99)
+      );
+      return sorted.map((img: any) => img.image_url).filter(Boolean);
     }
     return activeBook?.coverUri ? [activeBook.coverUri] : [];
   }, [listingData, activeBook?.coverUri]);
@@ -207,19 +221,32 @@ const BookDetailsScreen = () => {
   const { data: wishlistData, refetch: refetchWishlist } = useQuery({
     queryKey: ["wishlist"],
     queryFn: async () => {
-      const response = await api.get("/api/v1/marketplace/wishlist/");
-      return response.data.results || [];
+      try {
+        const response = await api.get("/api/v1/marketplace/wishlist/");
+        const data = response.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        return [];
+      } catch {
+        return [];
+      }
     },
   });
 
   const isFavorite = useMemo(() => {
-    if (!wishlistData || !listingId) return false;
-    return wishlistData.some((w: any) => String(w.listing.id) === String(listingId));
+    if (!Array.isArray(wishlistData) || !listingId) return false;
+    return wishlistData.some((w: any) => {
+      const lid = w?.listing?.id ?? w?.listing;
+      return String(lid) === String(listingId);
+    });
   }, [wishlistData, listingId]);
 
   const wishlistId = useMemo(() => {
-    if (!wishlistData || !listingId) return null;
-    const found = wishlistData.find((w: any) => String(w.listing.id) === String(listingId));
+    if (!Array.isArray(wishlistData) || !listingId) return null;
+    const found = wishlistData.find((w: any) => {
+      const lid = w?.listing?.id ?? w?.listing;
+      return String(lid) === String(listingId);
+    });
     return found ? found.id : null;
   }, [wishlistData, listingId]);
 
@@ -611,10 +638,10 @@ const BookDetailsScreen = () => {
             </View>
           </View>
 
-          {/* Genres as chips */}
+          {/* Category as chips */}
           {book.genresList && book.genresList.length > 0 ? (
             <View style={styles.genreSection}>
-              <Text style={styles.sectionTitle}>Genre</Text>
+              <Text style={styles.sectionTitle}>Category</Text>
               <View style={styles.chipsContainer}>
                 {book.genresList.map((g: string, idx: number) => (
                   <View key={idx} style={styles.genreChip}>

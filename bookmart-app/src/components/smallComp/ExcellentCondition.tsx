@@ -56,8 +56,7 @@ const BookCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const ExcellentCondition: React.FC<ExcellentConditionProps> = memo(

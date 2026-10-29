@@ -68,7 +68,7 @@ from apps.reports.services import (
                     "id": 1,
                     "reporter": {
                         "id": 1,
-                        "full_name": "John Doe",
+                        "full_name": "Amit Roy",
                         "email": "john@example.com",
                         "profile_image": None,
                     },
@@ -345,7 +345,7 @@ class ReportMyListView(generics.ListAPIView):
                     "id": 1,
                     "reporter": {
                         "id": 1,
-                        "full_name": "John Doe",
+                        "full_name": "Amit Roy",
                         "email": "john@example.com",
                         "profile_image": None,
                     },

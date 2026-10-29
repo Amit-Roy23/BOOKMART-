@@ -43,18 +43,19 @@ const MiniRowCard = memo(
           <View style={styles.badgeRow}>
             <View style={styles.timerBadge}>
               <Ionicons name="time" size={9} color={COLORS.red} />
-              <Text style={styles.timerText}>{item.timeLeft || "Soon"}</Text>
+              <Text style={styles.timerText}>{item.timeLeft || "12d left"}</Text>
             </View>
           </View>
           <Text style={styles.priceText}>₹{item.price}</Text>
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const EndingSoon: React.FC<EndingSoonProps> = memo(({ title = "Ending Soon", books, onBookPress, onSeeAllPress }) => {
+  if (!books || books.length === 0) return null;
+
   const displayBooks = books.slice(0, 4);
 
   return (

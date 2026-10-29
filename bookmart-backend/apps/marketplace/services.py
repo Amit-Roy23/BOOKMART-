@@ -222,6 +222,12 @@ def create_book_listing(seller, data):
         if genres:
             book.genres.add(*genres)
 
+    phone_number = data.get("phone_number")
+    if phone_number and hasattr(seller, "profile"):
+        if not seller.profile.phone_number:
+            seller.profile.phone_number = phone_number.strip()
+            seller.profile.save()
+
     listing = BookListing.objects.create(
         book=book,
         seller=seller,

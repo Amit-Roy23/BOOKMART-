@@ -5,17 +5,18 @@ import { SPACING } from "@/constants/spacings";
 import { rem, rf } from "@/utils/responsive";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation, router } from "expo-router";
+import { useNavigation, router, useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
@@ -101,13 +102,35 @@ const ProfileScreen = () => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [ispublic, setIsPublic] = useState(true);
   const [logoutVisible, setLogoutVisible] = useState(false);
-  const { data: userProfile, isLoading: isLoadingProfile } = useQuery({
+  const [refreshing, setRefreshing] = useState(false);
+  const {
+    data: userProfile,
+    isLoading: isLoadingProfile,
+    refetch: refetchProfile,
+  } = useQuery({
     queryKey: ["userProfile"],
     queryFn: async () => {
       const response = await api.get("/api/v1/core/profile/me/");
       return response.data;
     },
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchProfile();
+    }, [refetchProfile])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetchProfile();
+    } catch (err) {
+      console.log("Error refreshing profile:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchProfile]);
 
   const showLogoutDialog = () => setLogoutVisible(true);
   const hideLogoutDialog = () => setLogoutVisible(false);
@@ -270,7 +293,7 @@ const ProfileScreen = () => {
         <View style={styles.statsBlock}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{formatNumber(userProfile?.profile_views)}</Text>
-            <Text style={styles.statLabel}>Profile Views</Text>
+            <Text style={styles.statLabel}>Total Views</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
@@ -285,7 +308,18 @@ const ProfileScreen = () => {
         </View>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
         {/* Quick Actions */}
         <View style={[styles.sectionContainer, { marginTop: rf(-20) }]}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>

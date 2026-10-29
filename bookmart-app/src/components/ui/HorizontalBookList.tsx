@@ -202,6 +202,9 @@ const BookCard: React.FC<BookCardProps> = memo(
   (prev, next) => {
     return (
       prev.item.id === next.item.id &&
+      prev.item.coverUri === next.item.coverUri &&
+      prev.item.title === next.item.title &&
+      prev.item.price === next.item.price &&
       prev.index === next.index &&
       prev.animationType === next.animationType &&
       prev.cardLayout === next.cardLayout &&
@@ -212,6 +215,8 @@ const BookCard: React.FC<BookCardProps> = memo(
 
 const HorizontalBookList: React.FC<HorizontalBookListProps> = memo(
   ({ title, books, animationType = "standard", cardLayout = "standard", onBookPress, onSeeAllPress, loop = false }) => {
+    if (!books || books.length === 0) return null;
+
     const listRef = useRef<Animated.FlatList<any>>(null);
     const scrollX = useSharedValue(0);
 

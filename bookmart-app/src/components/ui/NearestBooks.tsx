@@ -36,35 +36,29 @@ interface NearestBooksProps {
   onSeeAllPress?: () => void;
 }
 
+interface BookCardProps {
+  item: NearestBookItem;
+  onPress?: (item: NearestBookItem) => void;
+  isLiked: boolean;
+  wishlistId?: string | number;
+}
+
 const BookCard = memo(
-  ({ item, onPress }: { item: NearestBookItem; onPress?: (item: NearestBookItem) => void }) => {
+  ({ item, onPress, isLiked, wishlistId }: BookCardProps) => {
     const queryClient = useQueryClient();
     const [showBurst, setShowBurst] = useState(false);
 
     const handlePress = useCallback(() => {
-      Haptics.selectionAsync();
+      try {
+        Haptics.selectionAsync();
+      } catch {}
       onPress?.(item);
     }, [item, onPress]);
 
-    const { data: wishlistData } = useQuery({
-      queryKey: ["wishlist"],
-      queryFn: async () => {
-        const response = await api.get("/api/v1/marketplace/wishlist/");
-        return response.data.results || [];
-      },
-    });
-
-    const wishlistEntry = useMemo(() => {
-      if (!wishlistData) return null;
-      return wishlistData.find((w: any) => String(w.listing.id) === String(item.id));
-    }, [wishlistData, item.id]);
-
-    const isLiked = !!wishlistEntry;
-
     const toggleWishlistMutation = useMutation({
       mutationFn: async () => {
-        if (isLiked && wishlistEntry) {
-          await api.delete(`/api/v1/marketplace/wishlist/${wishlistEntry.id}/`);
+        if (isLiked && wishlistId) {
+          await api.delete(`/api/v1/marketplace/wishlist/${wishlistId}/`);
         } else {
           await api.post("/api/v1/marketplace/wishlist/", { listing: item.id });
         }
@@ -76,11 +70,15 @@ const BookCard = memo(
 
     const toggleLike = useCallback(() => {
       if (!isLiked) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch {}
         setShowBurst(true);
         setTimeout(() => setShowBurst(false), 600);
       } else {
-        Haptics.selectionAsync();
+        try {
+          Haptics.selectionAsync();
+        } catch {}
       }
       toggleWishlistMutation.mutate();
     }, [isLiked, toggleWishlistMutation]);
@@ -97,19 +95,19 @@ const BookCard = memo(
           />
           <View style={styles.distanceBadge}>
             <Ionicons name="location-sharp" size={8} color={COLORS.primary} />
-            <Text style={styles.distanceText}>{item.distance}</Text>
+            <Text style={styles.distanceText}>{item.distance || "Nearby"}</Text>
           </View>
         </View>
 
         <View style={styles.infoContainer}>
           <Text numberOfLines={1} style={styles.titleText}>
-            {item.title}
+            {item.title || "Untitled Book"}
           </Text>
           <Text numberOfLines={1} style={styles.authorText}>
-            {item.author}
+            {item.author || "Unknown Author"}
           </Text>
           <View style={styles.priceRow}>
-            <Text style={styles.priceText}>₹{item.price}</Text>
+            <Text style={styles.priceText}>₹{item.price ?? 0}</Text>
             <View style={styles.heartContainer}>
               <TouchableOpacity
                 activeOpacity={0.7}
@@ -128,11 +126,40 @@ const BookCard = memo(
         </View>
       </TouchableOpacity>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const NearestBooks: React.FC<NearestBooksProps> = memo(({ books, onBookPress, onSeeAllPress }) => {
+  const { data: wishlistData } = useQuery({
+    queryKey: ["wishlist"],
+    queryFn: async () => {
+      try {
+        const response = await api.get("/api/v1/marketplace/wishlist/");
+        const data = response.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        return [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const wishlistMap = useMemo(() => {
+    const map = new Map<string, string | number>();
+    if (Array.isArray(wishlistData)) {
+      wishlistData.forEach((w: any) => {
+        const listingId = w?.listing?.id ?? w?.listing;
+        if (listingId !== undefined && listingId !== null) {
+          map.set(String(listingId), w.id);
+        }
+      });
+    }
+    return map;
+  }, [wishlistData]);
+
+  if (!books || books.length === 0) return null;
+
   return (
     <View style={styles.section}>
       {/* Header */}
@@ -148,7 +175,13 @@ const NearestBooks: React.FC<NearestBooksProps> = memo(({ books, onBookPress, on
       {/* Grid */}
       <View style={styles.grid}>
         {books.map((book) => (
-          <BookCard key={book.id} item={book} onPress={onBookPress} />
+          <BookCard
+            key={book.id}
+            item={book}
+            onPress={onBookPress}
+            isLiked={wishlistMap.has(String(book.id))}
+            wishlistId={wishlistMap.get(String(book.id))}
+          />
         ))}
       </View>
     </View>

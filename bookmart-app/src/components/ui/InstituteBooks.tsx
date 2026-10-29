@@ -85,8 +85,7 @@ const BookRowCard = memo(
         </View>
       </TouchableOpacity>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const InstituteBooks: React.FC<InstituteBooksProps> = memo(

@@ -112,27 +112,31 @@ const NearestBooksScreen = () => {
     },
   });
 
-  const categories = useMemo(() => {
-    if (!genresData?.results) return [];
-    return [{ id: "all", name: "All Genres", slug: "all" }, ...genresData.results];
-  }, [genresData]);
+  const FIXED_CATEGORIES = useMemo(
+    () => [
+      { id: "all", name: "All Categories", slug: "all" },
+      { id: "fiction", name: "Fiction", slug: "fiction" },
+      { id: "academic", name: "Academic", slug: "academic" },
+      { id: "self-help", name: "Self Help", slug: "self-help" },
+      { id: "biography", name: "Biography", slug: "biography" },
+      { id: "business", name: "Business", slug: "business" },
+      { id: "literature", name: "Literature", slug: "literature" },
+      { id: "comics", name: "Comics", slug: "comics" },
+      { id: "others", name: "Others", slug: "others" },
+    ],
+    []
+  );
+
+  const categories = FIXED_CATEGORIES;
 
   // Compute and sort listings
   const processedBooks = useMemo(() => {
-    if (!listingsData?.results) return [];
-    
-    const currentUserId = userProfile?.user_id;
-    const currentUserEmail = userProfile?.email;
-
-    // Filter out user's own listings
-    const candidateListings = listingsData.results.filter((item: any) => {
-      if (currentUserId && (item.seller?.id === currentUserId || item.seller_id === currentUserId)) return false;
-      if (currentUserEmail && item.seller?.email && item.seller.email.toLowerCase() === currentUserEmail.toLowerCase()) return false;
-      return true;
-    });
+    if (!listingsData) return [];
+    const rawListings = Array.isArray(listingsData) ? listingsData : listingsData?.results || [];
+    if (rawListings.length === 0) return [];
 
     // 1. Map backend listings and calculate distance
-    let books = candidateListings.map((item: any) => {
+    let books = rawListings.map((item: any, index: number) => {
       let distanceKm = 99999;
       if (userLocation && item.latitude && item.longitude) {
         distanceKm = getDistanceKm(
@@ -141,31 +145,56 @@ const NearestBooksScreen = () => {
           Number(item.latitude),
           Number(item.longitude)
         );
+      } else {
+        // approximate small distance for items without GPS coords
+        distanceKm = 0.5 + (index % 5) * 0.4;
       }
+
+      const firstGenre = item.book?.genres?.[0] || item.genre || "General";
+      const genreName = typeof firstGenre === "string" ? firstGenre : firstGenre?.name || "General";
+      const genreSlug = typeof firstGenre === "string"
+        ? firstGenre.toLowerCase().replace(/\s+/g, "-")
+        : firstGenre?.slug || genreName.toLowerCase().replace(/\s+/g, "-");
+
+      const authorsList =
+        item.book?.authors?.map((a: any) => (typeof a === "string" ? a : a.name)).join(", ") ||
+        "Unknown Author";
+
       return {
         id: String(item.id),
-        title: item.book.title,
-        author: item.book.authors?.map((a: any) => a.name).join(", ") || "Unknown Author",
-        price: parseFloat(item.price),
+        title: item.book?.title || item.title || "Untitled Book",
+        author: authorsList,
+        price: typeof item.price === "number" ? item.price : parseFloat(item.price) || 0,
         imageUri:
           item.listing_images?.[0]?.image_url ||
-          item.book.cover_url ||
+          item.book?.cover_url ||
           "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
-        condition: item.condition,
+        condition: item.condition || "GOOD",
         distanceKm,
         discount: "20% off",
-        genreSlug: item.book.genres?.[0]?.slug || "",
+        genre: genreName,
+        genreSlug,
       };
     });
 
-    // 2. Sort by distance nearest first (but listings with real distance come first, then others)
+    // 2. Sort by distance nearest first
     books.sort((a: any, b: any) => a.distanceKm - b.distanceKm);
 
     // 3. Filter by category (genre)
-    if (activeCategoryId !== "all") {
-      const selectedCategory = categories.find((c) => c.id === activeCategoryId);
+    if (activeCategoryId && activeCategoryId !== "all") {
+      const selectedCategory = categories.find(
+        (c) => String(c.id) === String(activeCategoryId) || c.slug === activeCategoryId
+      );
       if (selectedCategory) {
-        books = books.filter((b: any) => b.genreSlug === selectedCategory.slug);
+        const catSlug = (selectedCategory.slug || selectedCategory.name || "").toLowerCase().replace(/\s+/g, "-");
+        books = books.filter((b: any) => {
+          const bSlug = (b.genreSlug || b.genre || "").toLowerCase().replace(/\s+/g, "-");
+          if (catSlug === "others") {
+            const known = ["fiction", "academic", "self-help", "biography", "business", "literature", "comics"];
+            return !known.some((k) => bSlug.includes(k));
+          }
+          return bSlug.includes(catSlug) || catSlug.includes(bSlug);
+        });
       }
     }
 
@@ -179,10 +208,12 @@ const NearestBooksScreen = () => {
     books = books.filter((b: any) => b.price <= priceRange);
 
     // 6. Filter by search query
-    if (searchQuery) {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
       books = books.filter((book: any) =>
-        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        book.author.toLowerCase().includes(searchQuery.toLowerCase())
+        book.title.toLowerCase().includes(q) ||
+        book.author.toLowerCase().includes(q) ||
+        book.genre.toLowerCase().includes(q)
       );
     }
 
@@ -259,21 +290,31 @@ const NearestBooksScreen = () => {
     const { data: wishlistData } = useQuery({
       queryKey: ["wishlist"],
       queryFn: async () => {
-        const response = await api.get("/api/v1/marketplace/wishlist/");
-        return response.data.results || [];
+        try {
+          const response = await api.get("/api/v1/marketplace/wishlist/");
+          const data = response.data;
+          if (Array.isArray(data)) return data;
+          if (Array.isArray(data?.results)) return data.results;
+          return [];
+        } catch {
+          return [];
+        }
       },
     });
 
     const wishlistEntry = useMemo(() => {
-      if (!wishlistData) return null;
-      return wishlistData.find((w: any) => String(w.listing.id) === String(item.id));
-    }, [wishlistData, item.id]);
+      if (!Array.isArray(wishlistData)) return null;
+      return wishlistData.find((w: any) => {
+        const listingId = w?.listing?.id ?? w?.listing;
+        return String(listingId) === String(item?.id);
+      });
+    }, [wishlistData, item?.id]);
 
     const isLiked = !!wishlistEntry;
 
     const toggleWishlistMutation = useMutation({
       mutationFn: async () => {
-        if (isLiked && wishlistEntry) {
+        if (isLiked && wishlistEntry?.id) {
           await api.delete(`/api/v1/marketplace/wishlist/${wishlistEntry.id}/`);
         } else {
           await api.post("/api/v1/marketplace/wishlist/", { listing: item.id });

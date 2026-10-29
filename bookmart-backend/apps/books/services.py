@@ -47,10 +47,47 @@ def parse_first_publish_date(date_str):
     return None
 
 
+CANONICAL_CATEGORIES = [
+    "Fiction",
+    "Academic",
+    "Self Help",
+    "Biography",
+    "Business",
+    "Literature",
+    "Comics",
+    "Others",
+]
+
+
+def normalize_category_name(name: str) -> str:
+    """
+    Normalizes any genre or subject string into one of the 8 canonical categories:
+    Fiction, Academic, Self Help, Biography, Business, Literature, Comics, Others.
+    """
+    if not name:
+        return "Others"
+    n = str(name).strip().lower()
+    if any(k in n for k in ["fiction", "fantasy", "sci-fi", "science fiction", "mystery", "thriller", "romance", "novel", "drama"]):
+        return "Fiction"
+    if any(k in n for k in ["academic", "textbook", "education", "study", "exam", "competitive", "engineering", "medical", "law", "science", "mathematics", "computer", "programming", "java", "technology", "tech", "cs."]):
+        return "Academic"
+    if any(k in n for k in ["self-help", "self help", "motivation", "productivity", "psychology", "mental", "wellness", "habit", "personal growth"]):
+        return "Self Help"
+    if any(k in n for k in ["biography", "autobiography", "memoir", "life story", "diary"]):
+        return "Biography"
+    if any(k in n for k in ["business", "finance", "economics", "investing", "management", "startup", "entrepreneur", "marketing"]):
+        return "Business"
+    if any(k in n for k in ["literature", "classic", "poetry", "plays", "essay", "prose"]):
+        return "Literature"
+    if any(k in n for k in ["comic", "manga", "graphic novel", "cartoon", "anime", "superhero"]):
+        return "Comics"
+    return "Others"
+
+
 def process_genre_input(genre_input):
     """
-    Parses string or list input into Genre model instances.
-    Accepts single string (e.g. 'Fiction' or 'Fiction, Exam Prep') or list of strings/IDs.
+    Parses string or list input into canonical Genre model instances.
+    Accepts single string (e.g. 'Fiction' or 'Fiction, Academic') or list of strings/IDs.
     """
     if not genre_input:
         return []
@@ -65,19 +102,24 @@ def process_genre_input(genre_input):
 
     for item in items:
         if isinstance(item, Genre):
-            genres.append(item)
+            canon_name = normalize_category_name(item.name)
+            gen, _ = Genre.objects.get_or_create(name=canon_name)
+            if gen not in genres:
+                genres.append(gen)
         elif isinstance(item, int):
             try:
-                gen = Genre.objects.get(pk=item)
-                genres.append(gen)
+                raw_gen = Genre.objects.get(pk=item)
+                canon_name = normalize_category_name(raw_gen.name)
+                gen, _ = Genre.objects.get_or_create(name=canon_name)
+                if gen not in genres:
+                    genres.append(gen)
             except Genre.DoesNotExist:
                 pass
         elif isinstance(item, str) and item.strip():
-            name = item.strip()
-            if len(name) > 100:
-                name = name[:100]
-            gen, _ = Genre.objects.get_or_create(name=name)
-            genres.append(gen)
+            canon_name = normalize_category_name(item.strip())
+            gen, _ = Genre.objects.get_or_create(name=canon_name)
+            if gen not in genres:
+                genres.append(gen)
 
     return genres
 
@@ -464,24 +506,25 @@ def import_book_from_openlibrary(work_key, custom_category=None):
         # ManyToMany assignment
         book.authors.set(author_objects)
 
-        # Parse and assign genres from subjects (limit to top 10)
+        # Determine canonical category from custom_category or subjects
         genre_objects = []
         subjects = document.get("subjects", [])
-        for subject in subjects[:10]:
-            subject_name = subject.strip()
-            if len(subject_name) > 100:
-                subject_name = subject_name[:100]
-            if not subject_name:
-                continue
-            genre, _ = Genre.objects.get_or_create(name=subject_name)
-            genre_objects.append(genre)
-
-        # Handle manual custom genre input
         if custom_category:
-            manual_genres = process_genre_input(custom_category)
-            for gen in manual_genres:
-                if gen not in genre_objects:
-                    genre_objects.append(gen)
+            genre_objects = process_genre_input(custom_category)
+        elif subjects:
+            detected_category = None
+            for s in subjects:
+                norm = normalize_category_name(s)
+                if norm != "Others":
+                    detected_category = norm
+                    break
+            if not detected_category:
+                detected_category = "Others"
+            genre, _ = Genre.objects.get_or_create(name=detected_category)
+            genre_objects.append(genre)
+        else:
+            genre, _ = Genre.objects.get_or_create(name="Others")
+            genre_objects.append(genre)
 
         book.genres.set(genre_objects)
 

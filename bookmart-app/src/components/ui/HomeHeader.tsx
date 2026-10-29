@@ -11,15 +11,28 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface HomeHeaderProps {
   locationName?: string;
-  avatarUri?: string;
+  avatarUri?: string | null;
+  fullName?: string;
   notificationCount?: number;
   onNotificationPress?: () => void;
   onAvatarPress?: () => void;
 }
 
+const getInitials = (name?: string) => {
+  if (!name) return "U";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase();
+};
+
 const HomeHeader: React.FC<HomeHeaderProps> = memo(
   ({
-    avatarUri = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face",
+    avatarUri,
+    fullName,
     notificationCount = 0,
     onNotificationPress,
     onAvatarPress,
@@ -44,14 +57,20 @@ const HomeHeader: React.FC<HomeHeaderProps> = memo(
 
           {/* Profile Avatar with clean border */}
           <TouchableOpacity style={styles.avatarBtn} onPress={onAvatarPress} activeOpacity={0.7}>
-            <Image
-              source={{ uri: avatarUri }}
-              style={styles.avatar}
-              contentFit="fill"
-              cachePolicy="memory-disk"
-              recyclingKey={avatarUri}
-              transition={200}
-            />
+            {avatarUri ? (
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.avatar}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                recyclingKey={avatarUri}
+                transition={200}
+              />
+            ) : (
+              <View style={styles.initialsContainer}>
+                <Text style={styles.initialsText}>{getInitials(fullName)}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -144,9 +163,24 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.secondary,
     marginLeft: SPACING.xs,
+    backgroundColor: COLORS.secondary,
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatar: {
     width: "100%",
     height: "100%",
+  },
+  initialsContainer: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.secondary,
+  },
+  initialsText: {
+    fontSize: rem(0.75),
+    fontFamily: FONTS.montserrat.bold,
+    color: COLORS.primary,
   },
 });

@@ -18,7 +18,7 @@ const SOLD_BOOKS = [
   {
     id: "s1",
     title: "Project Hail Mary",
-    buyer: "John Doe",
+    buyer: "Amit Roy",
     soldDate: "2023-11-01",
     sellingPrice: 290,
     status: "Delivered",

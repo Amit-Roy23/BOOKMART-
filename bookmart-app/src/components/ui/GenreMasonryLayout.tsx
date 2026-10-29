@@ -30,21 +30,31 @@ const MasonryBookCard = memo(({ book, navigation }: { book: any; navigation: any
   const { data: wishlistData } = useQuery({
     queryKey: ["wishlist"],
     queryFn: async () => {
-      const response = await api.get("/api/v1/marketplace/wishlist/");
-      return response.data.results || [];
+      try {
+        const response = await api.get("/api/v1/marketplace/wishlist/");
+        const data = response.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        return [];
+      } catch {
+        return [];
+      }
     },
   });
 
   const wishlistEntry = useMemo(() => {
-    if (!wishlistData) return null;
-    return wishlistData.find((w: any) => String(w.listing.id) === String(book.id));
-  }, [wishlistData, book.id]);
+    if (!Array.isArray(wishlistData)) return null;
+    return wishlistData.find((w: any) => {
+      const listingId = w?.listing?.id ?? w?.listing;
+      return String(listingId) === String(book?.id);
+    });
+  }, [wishlistData, book?.id]);
 
   const isLiked = !!wishlistEntry;
 
   const toggleWishlistMutation = useMutation({
     mutationFn: async () => {
-      if (isLiked && wishlistEntry) {
+      if (isLiked && wishlistEntry?.id) {
         await api.delete(`/api/v1/marketplace/wishlist/${wishlistEntry.id}/`);
       } else {
         await api.post("/api/v1/marketplace/wishlist/", { listing: book.id });
@@ -122,7 +132,7 @@ const GenreMasonryLayout = memo(({ genreTitle }: GenreMasonryLayoutProps) => {
   const navigation = useNavigation<any>();
   const genreSlug = getSlugFromTitle(genreTitle);
 
-  // Fetch books matching genre slug
+  // Fetch books matching genre slug or marketplace listings fallback
   const {
     data: booksData,
     isLoading,
@@ -130,27 +140,83 @@ const GenreMasonryLayout = memo(({ genreTitle }: GenreMasonryLayoutProps) => {
   } = useQuery({
     queryKey: ["genre-books", genreSlug],
     queryFn: async () => {
-      const response = await api.get(`/api/v1/book/books/?genres__slug=${genreSlug}`);
-      return response.data;
+      try {
+        const response = await api.get(`/api/v1/book/books/?genres__slug=${genreSlug}`);
+        if (response.data?.results && response.data.results.length > 0) {
+          return response.data;
+        }
+      } catch (err) {
+        // fallback
+      }
+      const allRes = await api.get("/api/v1/marketplace/listings/");
+      return allRes.data;
     },
   });
 
   const genreBooks = useMemo(() => {
-    if (!booksData?.results) return [];
-    return booksData.results.map((item: any) => {
-      const activeListing = item.ranked_listings?.[0] || item.listings?.[0];
-      return {
-        id: String(activeListing?.id || item.id),
-        title: item.title,
-        author: item.authors?.map((a: any) => a.name).join(", ") || "Unknown Author",
-        price: activeListing ? parseFloat(activeListing.price) : 250,
-        imageUri:
+    const rawList: any[] = Array.isArray(booksData)
+      ? booksData
+      : booksData?.results || [];
+
+    if (rawList.length === 0) return [];
+
+    const normGenre = genreTitle.toLowerCase().trim();
+
+    return rawList
+      .map((item: any) => {
+        const isListing = Boolean(item.book && item.price !== undefined);
+        const bookObj = isListing ? item.book : item;
+        const activeListing = isListing
+          ? item
+          : item.ranked_listings?.[0] || item.listings?.[0];
+
+        const authors =
+          bookObj?.authors?.map((a: any) => (typeof a === "string" ? a : a.name)).join(", ") ||
+          "Unknown Author";
+        const price = activeListing
+          ? parseFloat(activeListing.price)
+          : typeof item.price === "number"
+          ? item.price
+          : 250;
+        const imageUri =
           activeListing?.listing_images?.[0]?.image_url ||
-          item.cover_url ||
-          "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
-        genre: genreTitle,
-      };
-    });
+          bookObj?.cover_url ||
+          "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop";
+
+        const rawGenres: any[] = bookObj?.genres || [];
+        const genresList: string[] = rawGenres.map((g: any) =>
+          typeof g === "string" ? g : g?.name || g?.slug || ""
+        );
+
+        return {
+          id: String(activeListing?.id || item.id),
+          title: bookObj?.title || item.title || "Untitled Book",
+          author: authors,
+          price: isNaN(price) ? 250 : price,
+          imageUri,
+          genre: genreTitle,
+          genres: genresList,
+        };
+      })
+      .filter((b: any) => {
+        if (normGenre === "others" || normGenre === "other") return true;
+        if (b.genres.length === 0) return true;
+        return b.genres.some((g: string) => {
+          const gLower = g.toLowerCase();
+          return (
+            gLower.includes(normGenre) ||
+            normGenre.includes(gLower) ||
+            (normGenre === "academic" &&
+              (gLower.includes("engineering") ||
+                gLower.includes("exam") ||
+                gLower.includes("science") ||
+                gLower.includes("computer") ||
+                gLower.includes("academic") ||
+                gLower.includes("physics") ||
+                gLower.includes("math")))
+          );
+        });
+      });
   }, [booksData, genreTitle]);
 
   const renderBookCard = ({ item }: { item: any }) => (

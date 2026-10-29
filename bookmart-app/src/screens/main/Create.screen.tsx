@@ -7,18 +7,20 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { router, useNavigation, useRoute } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -29,6 +31,7 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CATEGORIES } from "@/components/ui/GenreSection";
 
 // ────────────────────────────────────────────────────────────────────
 // Helpers & Constants
@@ -270,7 +273,8 @@ const CreateScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const editListingId = route.params?.editListingId;
+  const queryClient = useQueryClient();
+  const editListingId = route.params?.editListingId || route.params?.listingId || route.params?.id;
 
   // ── State ──
   const [currentStep, setCurrentStep] = useState(1);
@@ -279,21 +283,19 @@ const CreateScreen = () => {
   // Step 1 – Book Info
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [genre, setGenre] = useState("");
-  const [genreInput, setGenreInput] = useState("");
-  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
-  const [showGenreDropdown, setShowGenreDropdown] = useState(false);
+  const [category, setCategory] = useState("");
+  const [categoryInput, setCategoryInput] = useState("");
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [images, setImages] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [uploadProgress, setUploadProgress] = useState<number[]>([0, 0, 0, 0, 0, 0]);
   const [bookId, setBookId] = useState<number | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [debouncedTitle, setDebouncedTitle] = useState("");
-  const [loadingSuggestionKey, setLoadingSuggestionKey] = useState<string | null>(null);
 
   // Step 2 – Condition & Price
   const [condition, setCondition] = useState("good");
   const [notes, setNotes] = useState("");
   const [price, setPrice] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   // Step 3 – Description & Location
   const [description, setDescription] = useState("");
@@ -314,18 +316,16 @@ const CreateScreen = () => {
     },
   });
 
-  // ── Genre fallback list ──
-  const BOOK_GENRES = [
-    "Science Fiction",
-    "Romance",
+  // ── Standard 8 Categories list ──
+  const BOOK_CATEGORIES = [
+    "Fiction",
+    "Academic",
     "Self Help",
     "Biography",
     "Business",
-    "Engineering",
-    "Medical",
-    "Law",
-    "Competitive Exams",
-    "Other",
+    "Literature",
+    "Comics",
+    "Others",
   ];
 
   // ── Edit Mode Hydration ──
@@ -359,7 +359,9 @@ const CreateScreen = () => {
 
       const genreNames = editListingData.book.genres?.map((g: any) => (typeof g === "string" ? g : g.name)) || [];
       if (genreNames.length > 0) {
-        setGenreInput(genreNames[0]);
+        const normCat = normalizeCategory(genreNames[0]);
+        setCategoryInput(normCat);
+        setCategory(normCat);
       }
 
       // Load listing images
@@ -383,112 +385,47 @@ const CreateScreen = () => {
     }
   }, [editListingData, userProfile]);
 
-  // ── Debounced Book Title Search ──
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedTitle(title), 500);
-    return () => clearTimeout(handler);
-  }, [title]);
 
-  const { data: searchSuggestions = [], isLoading: isLoadingSuggestions } = useQuery({
-    queryKey: ["bookSearch", debouncedTitle],
-    queryFn: async () => {
-      const response = await api.get("/api/v1/book/search/", {
-        params: { q: debouncedTitle },
-      });
-      return response.data || [];
-    },
-    enabled: showSuggestions && debouncedTitle.trim().length >= 2,
-  });
 
-  // ── Genre list from backend ──
-  const { data: backendGenres = [] } = useQuery({
-    queryKey: ["genreList"],
-    queryFn: async () => {
-      const response = await api.get("/api/v1/book/genres/");
-      return (response.data?.results || response.data || []).map((g: any) => g.name);
-    },
-  });
+const normalizeCategory = (catStr: string | null | undefined): string => {
+  if (!catStr) return "Others";
+  const lower = catStr.toLowerCase();
+  const matched = CATEGORIES.find(
+    (c) => c.label.toLowerCase() === lower || c.id.toLowerCase() === lower
+  );
+  if (matched) return matched.label;
+  if (lower.includes("fiction") || lower.includes("fantasy") || lower.includes("novel") || lower.includes("romance") || lower.includes("thriller")) return "Fiction";
+  if (lower.includes("academic") || lower.includes("textbook") || lower.includes("exam") || lower.includes("science") || lower.includes("computer") || lower.includes("engineering") || lower.includes("prog") || lower.includes("java") || lower.includes("tech")) return "Academic";
+  if (lower.includes("self") || lower.includes("motivation") || lower.includes("habit") || lower.includes("wellness")) return "Self Help";
+  if (lower.includes("bio") || lower.includes("memoir")) return "Biography";
+  if (lower.includes("business") || lower.includes("finance") || lower.includes("money") || lower.includes("market") || lower.includes("management")) return "Business";
+  if (lower.includes("literature") || lower.includes("classic") || lower.includes("poetry")) return "Literature";
+  if (lower.includes("comic") || lower.includes("manga") || lower.includes("anime")) return "Comics";
+  return "Others";
+};
 
-  const genreOptions: string[] =
-    backendGenres.length > 0 ? backendGenres : availableGenres.length > 0 ? availableGenres : BOOK_GENRES;
+  const categoryOptions = useMemo(() => {
+    // Strictly the 8 Home screen categories
+    return CATEGORIES.map((c) => ({
+      id: c.id,
+      label: c.label,
+      icon: c.icon,
+      backgroundColor: c.backgroundColor,
+      borderColor: c.borderColor,
+      iconColor: c.iconColor,
+    }));
+  }, []);
 
-  // ── Import & Manual Create Mutations ──
-  const importMutation = useMutation({
-    mutationFn: async ({ openlibraryKey, genreVal }: { openlibraryKey: string; genreVal: string | null }) => {
-      const response = await api.post("/api/v1/book/import-openlibrary/", {
-        openlibrary_key: openlibraryKey,
-        genre: genreVal,
-      });
-      return response.data;
-    },
-    onSuccess: (importedBook) => {
-      setTitle(importedBook.title || "");
-      setAuthor(importedBook.authors?.join(", ") || "");
-      setBookId(importedBook.book_id || null);
-      const responseGenres = importedBook.genres || [];
-      if (responseGenres.length > 0) {
-        setAvailableGenres(responseGenres);
-        setGenreInput(responseGenres[0]);
-      }
-      setLoadingSuggestionKey(null);
-      setShowSuggestions(false);
-      showToast("Book imported successfully");
-    },
-    onError: (err: any) => {
-      showToast(err.response?.data?.detail || "Failed to import book.");
-      setLoadingSuggestionKey(null);
-    },
-  });
+  const selectedCategoryObj = useMemo(() => {
+    if (!categoryInput) return null;
+    return (
+      categoryOptions.find(
+        (c) => c.label.toLowerCase() === categoryInput.toLowerCase()
+      ) || categoryOptions[categoryOptions.length - 1]
+    );
+  }, [categoryInput, categoryOptions]);
 
-  const manualCreateMutation = useMutation({
-    mutationFn: async ({ titleVal, authorVal }: { titleVal: string; authorVal: string }) => {
-      const response = await api.post("/api/v1/book/manual/", {
-        title: titleVal,
-        author: authorVal,
-      });
-      return response.data;
-    },
-    onSuccess: (manualBook) => {
-      setTitle(manualBook.title || "");
-      setAuthor(manualBook.authors?.join(", ") || "");
-      setBookId(manualBook.book_id || null);
-      const responseGenres = manualBook.genres || [];
-      if (responseGenres.length > 0) {
-        setAvailableGenres(responseGenres);
-        setGenreInput(responseGenres[0]);
-      }
-      setLoadingSuggestionKey(null);
-      setShowSuggestions(false);
-      showToast("Manual book entry created");
-    },
-    onError: (err: any) => {
-      showToast(err.response?.data?.detail || "Failed to create manual book.");
-      setLoadingSuggestionKey(null);
-    },
-  });
 
-  const handleSelectSuggestion = (suggestion: any) => {
-    if (suggestion.is_local && suggestion.id) {
-      setShowSuggestions(false);
-      setTitle(suggestion.title || "");
-      setAuthor(suggestion.authors?.join(", ") || "");
-      setBookId(suggestion.id);
-      const responseGenres = suggestion.genres || [];
-      if (responseGenres.length > 0) {
-        setAvailableGenres(responseGenres);
-        setGenreInput(responseGenres[0]);
-      }
-      showToast("Selected local book record");
-    } else {
-      setLoadingSuggestionKey(suggestion.openlibrary_key);
-      importMutation.mutate({ openlibraryKey: suggestion.openlibrary_key, genreVal: null });
-    }
-  };
-
-  const handleManualInsert = () => {
-    setLoadingSuggestionKey("manual");
-    manualCreateMutation.mutate({ titleVal: title, authorVal: author || "Unknown" });
-  };
 
   // ── Image Handlers ──
   const handleImagePick = (index: number) => {
@@ -788,6 +725,13 @@ const CreateScreen = () => {
       showToast("Please enter a valid price");
       return;
     }
+    if (!userProfile?.phone_number) {
+      const clean = phoneNumber.replace(/[^0-9]/g, "");
+      if (clean.length < 10) {
+        showToast("Please enter a valid 10-digit WhatsApp phone number");
+        return;
+      }
+    }
     if (!location) {
       getCurrentLocation(false);
     }
@@ -802,7 +746,11 @@ const CreateScreen = () => {
       });
       return response.data;
     },
-    onSuccess: () => setShowSuccess(true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["all-listings"] });
+      setShowSuccess(true);
+    },
     onError: (err: any) => showToast(err.response?.data?.detail || "Failed to list book."),
   });
 
@@ -813,7 +761,17 @@ const CreateScreen = () => {
       });
       return response.data;
     },
-    onSuccess: () => setShowSuccess(true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["all-listings"] });
+      if (editListingId) {
+        queryClient.invalidateQueries({ queryKey: ["listing", editListingId] });
+        queryClient.invalidateQueries({ queryKey: ["edit-listing", editListingId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["my-listings"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-views"] });
+      setShowSuccess(true);
+    },
     onError: (err: any) => showToast(err.response?.data?.detail || "Failed to update book."),
   });
 
@@ -823,8 +781,9 @@ const CreateScreen = () => {
     setCondition("good");
     setNotes("");
     setPrice("");
-    setGenre("");
-    setGenreInput("");
+    setPhoneNumber("");
+    setCategory("");
+    setCategoryInput("");
     setDescription("");
     setImages([null, null, null, null, null, null]);
     setUploadProgress([0, 0, 0, 0, 0, 0]);
@@ -849,7 +808,37 @@ const CreateScreen = () => {
     } else {
       formData.append("title", title);
       formData.append("author", author);
-      if (genreInput) formData.append("genre", genreInput);
+      if (categoryInput) {
+        formData.append("genre", categoryInput);
+        formData.append("category", categoryInput);
+      }
+    }
+
+    const finalPhone = userProfile?.phone_number || phoneNumber.trim();
+    if (finalPhone) {
+      let formattedPhone = finalPhone;
+      if (!formattedPhone.startsWith("+91")) {
+        formattedPhone = "+91" + formattedPhone.replace(/^(0|91|\+91)/, "");
+      }
+      formData.append("phone_number", formattedPhone);
+    }
+
+    // Handle removed images in edit mode
+    if (editListingId && editListingData?.listing_images) {
+      editListingData.listing_images.forEach((img: any) => {
+        let index = -1;
+        const lbl = String(img.label || "").toUpperCase();
+        if (lbl === "FRONT_COVER") index = 0;
+        else if (lbl === "BACK_COVER") index = 1;
+        else if (lbl === "SPINE") index = 2;
+        else if (lbl === "MIDDLE_PAGE") index = 3;
+        else if (lbl === "DAMAGE_1") index = 4;
+        else if (lbl === "DAMAGE_2") index = 5;
+
+        if (index !== -1 && !images[index]) {
+          formData.append("removed_image_ids", String(img.id));
+        }
+      });
     }
 
     const appendImageFile = (key: string, uri: string) => {
@@ -880,14 +869,13 @@ const CreateScreen = () => {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
-      <Header title={editListingId ? "Edit Listing" : "List a Book"} />
+      <Header title={editListingId ? "Edit Listing" : "List a Book"} backButton={!!editListingId} />
       <StepIndicator currentStep={currentStep} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={!showSuggestions && !showGenreDropdown}
       >
         {/* ─── Step 1: Book Info ────────────────────────────────────── */}
         {currentStep === 1 && (
@@ -957,96 +945,24 @@ const CreateScreen = () => {
             </View>
 
             {/* Basic Info */}
-            <View style={[styles.sectionCard, (showSuggestions || showGenreDropdown) && { zIndex: 10 }]}>
+            <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
                 <Text style={styles.sectionTitle}>Book Details</Text>
               </View>
 
-              {/* Title with autocomplete */}
-              <View style={[styles.fieldGroup, showSuggestions && { zIndex: 10 }]}>
+              {/* Title */}
+              <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>
                   Book Title <Text style={styles.asterisk}>*</Text>
                 </Text>
                 <Input
-                  placeholder="Search or type book title"
+                  placeholder="e.g. The Great Gatsby"
                   value={title}
-                  onChangeText={(text) => {
-                    setTitle(text);
-                    setShowSuggestions(true);
-                  }}
+                  onChangeText={setTitle}
                   autoCapitalize="words"
                   containerStyle={{ marginVertical: 0 }}
                 />
-                {showSuggestions && title.trim().length >= 2 && (
-                  <View style={styles.suggestionsContainer}>
-                    {isLoadingSuggestions ? (
-                      <View style={styles.suggestionsLoading}>
-                        <ActivityIndicator size="small" color={COLORS.primary} />
-                        <Text style={styles.suggestionsLoadingText}>Searching…</Text>
-                      </View>
-                    ) : (
-                      <ScrollView
-                        style={{ maxHeight: rem(12) }}
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled
-                      >
-                        {searchSuggestions.map((item: any, idx: number) => {
-                          const isThisLoading =
-                            loadingSuggestionKey === item.openlibrary_key ||
-                            (item.is_local && loadingSuggestionKey === String(item.id));
-                          return (
-                            <TouchableOpacity
-                              key={item.id || item.openlibrary_key || idx}
-                              style={styles.suggestionItem}
-                              onPress={() => handleSelectSuggestion(item)}
-                              disabled={loadingSuggestionKey !== null}
-                            >
-                              <Image
-                                source={{
-                                  uri:
-                                    item.cover_url ||
-                                    "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=120&auto=format&fit=crop",
-                                }}
-                                style={styles.suggestionCover}
-                                contentFit="cover"
-                              />
-                              <View style={{ flex: 1, marginLeft: 10 }}>
-                                <Text style={styles.suggestionTitle} numberOfLines={1}>
-                                  {item.title}
-                                </Text>
-                                <Text style={styles.suggestionAuthor} numberOfLines={1}>
-                                  by {item.authors?.join(", ") || "Unknown"}
-                                </Text>
-                              </View>
-                              {isThisLoading && <ActivityIndicator size="small" color={COLORS.primary} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                        {/* Manual insert */}
-                        <TouchableOpacity
-                          style={[styles.suggestionItem, { borderTopWidth: 1, borderTopColor: COLORS.grayLight }]}
-                          onPress={handleManualInsert}
-                          disabled={loadingSuggestionKey !== null}
-                        >
-                          <View style={styles.manualIconWrap}>
-                            {loadingSuggestionKey === "manual" ? (
-                              <ActivityIndicator size="small" color={COLORS.blue} />
-                            ) : (
-                              <Ionicons name="create-outline" size={18} color={COLORS.blue} />
-                            )}
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <Text style={[styles.suggestionTitle, { color: COLORS.blue }]} numberOfLines={1}>
-                              Add "{title}" manually
-                            </Text>
-                            <Text style={styles.suggestionAuthor}>Not found? Insert details manually.</Text>
-                          </View>
-                        </TouchableOpacity>
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
               </View>
 
               {/* Author */}
@@ -1063,42 +979,43 @@ const CreateScreen = () => {
                 />
               </View>
 
-              {/* Genre Dropdown */}
-              <View style={[styles.fieldGroup, showGenreDropdown && { zIndex: 10 }]}>
-                <Text style={styles.fieldLabel}>Genre</Text>
+              {/* Category Field Trigger */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Category</Text>
                 <TouchableOpacity
-                  style={styles.dropdownSelector}
-                  activeOpacity={0.8}
-                  onPress={() => setShowGenreDropdown(!showGenreDropdown)}
+                  style={[styles.dropdownSelector, categoryInput ? styles.dropdownSelectorSelected : null]}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowCategoryDropdown(true);
+                  }}
                 >
-                  <Text style={[styles.dropdownText, !genreInput && { color: COLORS.textMuted }]}>
-                    {genreInput || "Select Genre"}
-                  </Text>
-                  <Ionicons
-                    name={showGenreDropdown ? "chevron-up" : "chevron-down"}
-                    size={20}
-                    color={COLORS.textMuted}
-                  />
-                </TouchableOpacity>
-                {showGenreDropdown && (
-                  <View style={styles.suggestionsContainer}>
-                    <ScrollView style={{ maxHeight: rem(10) }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-                      {genreOptions.map((g: string, idx: number) => (
-                        <TouchableOpacity
-                          key={idx}
-                          style={[styles.suggestionItem, genreInput === g && { backgroundColor: COLORS.secondary }]}
-                          onPress={() => {
-                            setGenreInput(g);
-                            setGenre(g);
-                            setShowGenreDropdown(false);
-                          }}
+                  <View style={styles.dropdownValueRow}>
+                    {selectedCategoryObj ? (
+                      <View style={styles.selectedCategoryBadge}>
+                        <View
+                          style={[
+                            styles.categoryBadgeIconWrap,
+                            {
+                              backgroundColor: selectedCategoryObj.backgroundColor,
+                              borderColor: selectedCategoryObj.borderColor,
+                            },
+                          ]}
                         >
-                          <Text style={styles.suggestionTitle}>{g}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                          <Ionicons
+                            name={selectedCategoryObj.icon}
+                            size={15}
+                            color={selectedCategoryObj.iconColor}
+                          />
+                        </View>
+                        <Text style={styles.dropdownTextSelected}>{selectedCategoryObj.label}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.dropdownTextPlaceholder}>Select Category</Text>
+                    )}
                   </View>
-                )}
+                  <Ionicons name="chevron-down" size={20} color={COLORS.textMuted} />
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -1187,6 +1104,45 @@ const CreateScreen = () => {
                   }
                 />
               </View>
+
+              {/* WhatsApp Contact Section */}
+              {userProfile?.phone_number ? (
+                <View style={styles.savedPhonePill}>
+                  <View style={styles.savedPhoneLeft}>
+                    <View style={styles.whatsappIconBg}>
+                      <Ionicons name="logo-whatsapp" size={16} color={COLORS.white} />
+                    </View>
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={styles.savedPhoneLabel}>WhatsApp Contact (Saved)</Text>
+                      <Text style={styles.savedPhoneValue}>{userProfile.phone_number}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.green} />
+                </View>
+              ) : (
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>
+                    WhatsApp Number <Text style={styles.asterisk}>*</Text>
+                  </Text>
+                  <Input
+                    placeholder="10-digit mobile number"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                    maxLength={13}
+                    containerStyle={{ marginVertical: 0 }}
+                    prefix={
+                      <View style={styles.phonePrefixWrap}>
+                        <Ionicons name="logo-whatsapp" size={16} color={COLORS.green} />
+                        <Text style={styles.phonePrefixText}>+91</Text>
+                      </View>
+                    }
+                  />
+                  <Text style={styles.fieldHint}>
+                    Required on first listing. Saved to your profile so buyers can connect with you instantly.
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.actionRow}>
@@ -1323,12 +1279,95 @@ const CreateScreen = () => {
         )}
       </ScrollView>
 
+      {/* Category Selection Modal Sheet */}
+      <Modal
+        visible={showCategoryDropdown}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCategoryDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryDropdown(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Select Category</Text>
+                <Text style={styles.modalSubtitle}>Choose a category matching your book</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setShowCategoryDropdown(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={20} color={COLORS.black} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {categoryOptions.map((cat) => {
+                const isSelected = categoryInput.toLowerCase() === cat.label.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={cat.id || cat.label}
+                    style={[styles.categoryOptionItem, isSelected && styles.categoryOptionItemSelected]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setCategoryInput(cat.label);
+                      setCategory(cat.label);
+                      setShowCategoryDropdown(false);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.categoryIconWrap,
+                        {
+                          backgroundColor: cat.backgroundColor,
+                          borderColor: cat.borderColor,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={cat.icon} size={20} color={cat.iconColor} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.categoryOptionLabel,
+                        isSelected && styles.categoryOptionLabelSelected,
+                      ]}
+                    >
+                      {cat.label}
+                    </Text>
+                    {isSelected ? (
+                      <View style={styles.selectedCheckCircle}>
+                        <Ionicons name="checkmark" size={14} color={COLORS.white} />
+                      </View>
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color={COLORS.grayHeavvy} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Success Overlay */}
       {showSuccess && (
         <SuccessOverlay
           onViewListing={() => {
             resetForm();
-            router.push("/(screens)/MyListings" as any);
+            router.push("/(screens)/ManageListings" as any);
           }}
           onGoHome={() => {
             resetForm();
@@ -1457,75 +1496,145 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.md,
   },
+  dropdownSelectorSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: "#F8FAFC",
+  },
+  dropdownValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  selectedCategoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  categoryBadgeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  dropdownTextSelected: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
+  },
+  dropdownTextPlaceholder: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.manrope.regular,
+    color: COLORS.textMuted,
+  },
   dropdownText: {
     fontSize: rem(1),
     fontFamily: FONTS.manrope.medium,
     color: COLORS.black,
   },
 
-  // Suggestions / dropdown overlay
-  suggestionsContainer: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
+  // Category Modal Sheet
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
     backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
-    marginTop: 4,
-    zIndex: 100,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    overflow: "hidden",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 12,
+    paddingBottom: 36,
+    maxHeight: "75%",
   },
-  suggestionsLoading: {
+  modalHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.grayHeavvy,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  modalHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    justifyContent: "center",
-    padding: SPACING.md,
-  },
-  suggestionsLoadingText: {
-    marginLeft: 8,
-    fontSize: rem(0.8125),
-    fontFamily: FONTS.manrope.medium,
-    color: COLORS.textMuted,
-  },
-  suggestionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderBottomWidth: 0.5,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
     borderBottomColor: COLORS.grayLight,
   },
-  suggestionCover: {
-    width: 36,
-    height: 48,
-    borderRadius: 6,
-    backgroundColor: COLORS.grayLight,
-  },
-  suggestionTitle: {
-    fontSize: rem(0.8125),
-    fontFamily: FONTS.manrope.semibold,
+  modalTitle: {
+    fontSize: rem(1.125),
+    fontFamily: FONTS.montserrat.bold,
     color: COLORS.black,
   },
-  suggestionAuthor: {
-    fontSize: rem(0.6875),
-    fontFamily: FONTS.manrope.regular,
+  modalSubtitle: {
+    fontSize: rem(0.75),
+    fontFamily: FONTS.manrope.medium,
     color: COLORS.textMuted,
     marginTop: 2,
   },
-  manualIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: COLORS.blueLight,
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.grayLight,
     alignItems: "center",
     justifyContent: "center",
   },
+  modalScroll: {
+    maxHeight: 380,
+  },
+  modalScrollContent: {
+    paddingBottom: 16,
+  },
+  categoryOptionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.04)",
+  },
+  categoryOptionItemSelected: {
+    backgroundColor: "#F0F7FF",
+    borderColor: COLORS.primary,
+  },
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  categoryOptionLabel: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.manrope.semibold,
+    color: COLORS.black,
+    flex: 1,
+  },
+  categoryOptionLabelSelected: {
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.primary,
+  },
+  selectedCheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+
 
   // Condition grid
   conditionGrid: {
@@ -1573,6 +1682,59 @@ const styles = StyleSheet.create({
     fontSize: rem(0.9375),
     fontFamily: FONTS.montserrat.bold,
     color: COLORS.primary,
+  },
+  savedPhonePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+    borderRadius: 14,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    marginTop: SPACING.sm,
+  },
+  savedPhoneLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  whatsappIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  savedPhoneLabel: {
+    fontSize: rem(0.6875),
+    fontFamily: FONTS.manrope.medium,
+    color: COLORS.textMuted,
+  },
+  savedPhoneValue: {
+    fontSize: rem(0.875),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
+    marginTop: 1,
+  },
+  phonePrefixWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 6,
+    gap: 4,
+  },
+  phonePrefixText: {
+    fontSize: rem(0.875),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.text,
+  },
+  fieldHint: {
+    fontSize: rem(0.6875),
+    fontFamily: FONTS.manrope.regular,
+    color: COLORS.textMuted,
+    marginTop: 4,
+    lineHeight: 15,
   },
 
   // Location

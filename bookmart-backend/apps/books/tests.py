@@ -230,7 +230,7 @@ class BookImportCategorizationTests(APITestCase):
         url = "/api/v1/book/manual/"
         data = {
             "title": "My Custom Unique Book",
-            "author": "John Doe",
+            "author": "Amit Roy",
             "genre": "Self Help Custom",
             "published_year": 2024,
             "description": "A great unique book.",
@@ -239,7 +239,7 @@ class BookImportCategorizationTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["title"], "My Custom Unique Book")
-        self.assertEqual(response.data["authors"], ["John Doe"])
+        self.assertEqual(response.data["authors"], ["Amit Roy"])
         self.assertIn("Self Help Custom", response.data["genres"])
         self.assertTrue(response.data["is_local"])
 

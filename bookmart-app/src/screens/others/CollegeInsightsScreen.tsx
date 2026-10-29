@@ -6,117 +6,86 @@ import { FONTS } from "@/constants/fonts";
 import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const BOOKS_DATA = [
-  {
-    id: "1",
-    title: "Atomic Habits",
-    author: "James Clear",
-    price: "350",
-    views: 128,
-    messages: 12,
-    coverUri: "https://m.media-amazon.com/images/I/91bYsX41DVL.jpg",
-  },
-  {
-    id: "2",
-    title: "The Kite Runner",
-    author: "Khaled Hosseini",
-    price: "230",
-    views: 98,
-    messages: 8,
-    coverUri: "https://m.media-amazon.com/images/I/81IzbD2IiIL.jpg",
-  },
-  {
-    id: "3",
-    title: "1984",
-    author: "George Orwell",
-    price: "200",
-    views: 76,
-    messages: 5,
-    coverUri: "https://m.media-amazon.com/images/I/71kxa1-0mfL.jpg",
-  },
-  {
-    id: "4",
-    title: "The Alchemist",
-    author: "Paulo Coelho",
-    price: "280",
-    views: 112,
-    messages: 9,
-    coverUri: "https://m.media-amazon.com/images/I/71aFt4+OTOL.jpg",
-  },
-];
-
-const TOP_COLLEGES = [
-  {
-    id: "c1",
-    name: "Shri Ram College of Commerce",
-    university: "University of Delhi",
-    books: 532,
-    logo: "https://upload.wikimedia.org/wikipedia/en/thumb/9/91/Shri_Ram_College_of_Commerce.png/220px-Shri_Ram_College_of_Commerce.png",
-  },
-  {
-    id: "c2",
-    name: "Hindu College",
-    university: "University of Delhi",
-    books: 412,
-    logo: "https://upload.wikimedia.org/wikipedia/en/thumb/3/3d/Hindu_College_Delhi_Logo.jpg/220px-Hindu_College_Delhi_Logo.jpg",
-  },
-  {
-    id: "c3",
-    name: "Lady Shri Ram College",
-    university: "University of Delhi",
-    books: 398,
-    logo: "https://upload.wikimedia.org/wikipedia/en/thumb/8/82/Lady_Shri_Ram_College_for_Women_Logo.jpg/220px-Lady_Shri_Ram_College_for_Women_Logo.jpg",
-  },
-  {
-    id: "c4",
-    name: "Kirori Mal College",
-    university: "University of Delhi",
-    books: 287,
-    logo: "https://upload.wikimedia.org/wikipedia/en/thumb/5/5a/Kirori_Mal_College_Logo.jpg/220px-Kirori_Mal_College_Logo.jpg",
-  },
-  {
-    id: "c5",
-    name: "Hansraj College",
-    university: "University of Delhi",
-    books: 235,
-    logo: "https://upload.wikimedia.org/wikipedia/en/thumb/4/44/Hansraj_College_logo.jpg/220px-Hansraj_College_logo.jpg",
-  },
-];
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/api/clients";
 
 const CollegeBookCard = ({ book }: { book: any }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const queryClient = useQueryClient();
   const [showBurst, setShowBurst] = useState(false);
 
+  const { data: wishlistData } = useQuery({
+    queryKey: ["wishlist"],
+    queryFn: async () => {
+      try {
+        const response = await api.get("/api/v1/marketplace/wishlist/");
+        const data = response.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        return [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const wishlistEntry = useMemo(() => {
+    if (!Array.isArray(wishlistData)) return null;
+    return wishlistData.find((w: any) => {
+      const listingId = w?.listing?.id ?? w?.listing;
+      return String(listingId) === String(book?.id);
+    });
+  }, [wishlistData, book?.id]);
+
+  const isLiked = !!wishlistEntry;
+
+  const toggleWishlistMutation = useMutation({
+    mutationFn: async () => {
+      if (isLiked && wishlistEntry?.id) {
+        await api.delete(`/api/v1/marketplace/wishlist/${wishlistEntry.id}/`);
+      } else {
+        await api.post("/api/v1/marketplace/wishlist/", { listing: book.id });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
+    },
+  });
+
   const handleFavorite = () => {
-    const next = !isFavorite;
-    setIsFavorite(next);
-    if (next) {
+    if (!isLiked) {
       setShowBurst(true);
-      setTimeout(() => {
-        setShowBurst(false);
-      }, 700);
+      setTimeout(() => setShowBurst(false), 700);
     }
+    toggleWishlistMutation.mutate();
   };
 
   return (
-    <View style={styles.bookCardContainer}>
+    <TouchableOpacity
+      activeOpacity={0.9}
+      style={styles.bookCardContainer}
+      onPress={() =>
+        router.push({
+          pathname: "/(screens)/BookDetails",
+          params: { listingId: book.id, categoryTitle: "College" },
+        })
+      }
+    >
       <View style={styles.bookCard}>
         <View style={styles.bookCoverWrap}>
-          <Image source={{ uri: book.coverUri }} style={styles.bookCover} contentFit="fill" />
+          <Image source={{ uri: book.coverUri }} style={styles.bookCover} contentFit="cover" />
           <TouchableOpacity activeOpacity={0.6} style={styles.favBtn} onPress={handleFavorite}>
             {showBurst && (
               <View style={styles.burstContainer}>
                 <HeartBurst />
               </View>
             )}
-            <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={18} color={COLORS.primary} />
+            <Ionicons name={isLiked ? "heart" : "heart-outline"} size={18} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -133,110 +102,171 @@ const CollegeBookCard = ({ book }: { book: any }) => {
           <Ionicons name="eye-outline" size={12} color={COLORS.textMuted} />
           <Text style={styles.metricText}>{book.views}</Text>
         </View>
-        <View style={styles.metricItem}>
-          <Ionicons name="chatbubble-outline" size={12} color={COLORS.textMuted} />
-          <Text style={styles.metricText}>{book.messages}</Text>
-        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
 const CollegeInsightsScreen = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
-  const renderActivitySection = () => (
-    <View style={styles.activitySection}>
-      <Text style={styles.sectionTitle}>Your College Activity</Text>
-      <Text style={styles.sectionSub}>See how many students from your college are using BookMart.</Text>
+  // Fetch real user profile
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/core/profile/me/");
+      return response.data;
+    },
+  });
 
-      <View style={styles.collegeCard}>
-        <View style={styles.collegeCardLeft}>
-          <View style={styles.collegeIconWrap}>
-            <Ionicons name="school-outline" size={20} color={COLORS.primary} />
-          </View>
-          <View style={styles.collegeTextWrap}>
-            <Text style={styles.collegeName} numberOfLines={1}>
-              Shri Ram College of Commerce
-            </Text>
-            <Text style={styles.collegeUniv} numberOfLines={1}>
-              University of Delhi
-            </Text>
-          </View>
-        </View>
-      </View>
+  // Fetch real listings
+  const { data: listingsData } = useQuery({
+    queryKey: ["all-listings"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/marketplace/listings/");
+      return response.data;
+    },
+  });
 
-      <View style={styles.statsRow}>
-        <View style={styles.statBox}>
-          <Ionicons name="people" size={20} color={COLORS.primary} style={styles.statIcon} />
-          <Text style={styles.statNum}>248</Text>
-          <Text style={styles.statTitle}>Students on BookMart</Text>
-          <Text style={styles.statDesc}>From your college</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Ionicons name="book-outline" size={20} color={COLORS.primary} style={styles.statIcon} />
-          <Text style={styles.statNum}>532</Text>
-          <Text style={styles.statTitle}>Books Listed</Text>
-          <Text style={styles.statDesc}>By your college</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Ionicons name="eye-outline" size={20} color={COLORS.primary} style={styles.statIcon} />
-          <Text style={styles.statNum}>1.8K</Text>
-          <Text style={styles.statTitle}>Total Views</Text>
-          <Text style={styles.statDesc}>On college books</Text>
-        </View>
-      </View>
-    </View>
-  );
+  // Fetch real colleges
+  const { data: collegesData } = useQuery({
+    queryKey: ["colleges-list"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/core/colleges/");
+      return response.data;
+    },
+  });
 
-  const renderBooksSection = () => (
-    <View style={styles.booksSection}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitleSmall}>Books from Your College</Text>
-      </View>
+  const allListings = useMemo(() => {
+    return Array.isArray(listingsData) ? listingsData : listingsData?.results || [];
+  }, [listingsData]);
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.booksScrollContent}>
-        {BOOKS_DATA.map((book) => (
-          <CollegeBookCard key={book.id} book={book} />
-        ))}
-      </ScrollView>
-    </View>
-  );
+  const colleges = useMemo(() => {
+    return Array.isArray(collegesData) ? collegesData : collegesData?.results || [];
+  }, [collegesData]);
 
-  const renderTopColleges = () => (
-    <View style={styles.topCollegesSection}>
-      <View style={styles.sectionHeaderRow}>
-        <View>
-          <Text style={styles.sectionTitleSmall}>Top Colleges</Text>
-          <Text style={styles.sectionSubSmall}>Colleges with the most active listings</Text>
-        </View>
-      </View>
+  const userCollege = userProfile?.college || (colleges.length > 0 ? colleges[0] : null);
 
-      <View style={styles.leaderboardList}>
-        {TOP_COLLEGES.map((college, index) => (
-          <View key={college.id} style={styles.leaderboardItem}>
-            <Text style={styles.rankText}>{index + 1}</Text>
-            <View style={styles.collegeLogoWrap}>
-              <Image source={{ uri: college.logo }} style={styles.collegeLogo} contentFit="fill" />
+  const collegeBooks = useMemo(() => {
+    if (!userCollege || allListings.length === 0) return [];
+    const collegeId = userCollege.id;
+    return allListings
+      .filter((item: any) => item.seller?.profile?.college?.id === collegeId)
+      .map((item: any) => ({
+        id: String(item.id),
+        title: item.book?.title || item.title || "Untitled Book",
+        author: item.book?.authors?.map((a: any) => (typeof a === "string" ? a : a.name)).join(", ") || "Unknown Author",
+        price: typeof item.price === "number" ? item.price : parseFloat(item.price) || 0,
+        coverUri: item.listing_images?.[0]?.image_url || item.book?.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
+        views: item.views_count || 0,
+      }));
+  }, [allListings, userCollege]);
+
+  const totalCollegeViews = useMemo(() => {
+    return collegeBooks.reduce((acc: number, b: any) => acc + (b.views || 0), 0);
+  }, [collegeBooks]);
+
+  const renderActivitySection = () => {
+    if (!userCollege) return null;
+
+    return (
+      <View style={styles.activitySection}>
+        <Text style={styles.sectionTitle}>Your College Activity</Text>
+        <Text style={styles.sectionSub}>See how many students from your college are using BookMart.</Text>
+
+        <View style={styles.collegeCard}>
+          <View style={styles.collegeCardLeft}>
+            <View style={styles.collegeIconWrap}>
+              <Ionicons name="school-outline" size={20} color={COLORS.primary} />
             </View>
-            <View style={styles.leaderboardInfo}>
-              <Text style={styles.leaderboardName} numberOfLines={1}>
-                {college.name}
+            <View style={styles.collegeTextWrap}>
+              <Text style={styles.collegeName} numberOfLines={1}>
+                {userCollege.name}
               </Text>
-              <Text style={styles.leaderboardUniv} numberOfLines={1}>
-                {college.university}
+              <Text style={styles.collegeUniv} numberOfLines={1}>
+                {userCollege.district ? `${userCollege.district}, ${userCollege.state}` : userCollege.state || "Campus"}
               </Text>
             </View>
-            <View style={styles.leaderboardRight}>
-              <Text style={styles.leaderboardBooks}>{college.books}</Text>
-              <Text style={styles.leaderboardBooksLabel}>Books Listed</Text>
-            </View>
           </View>
-        ))}
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Ionicons name="book-outline" size={20} color={COLORS.primary} style={styles.statIcon} />
+            <Text style={styles.statNum}>{collegeBooks.length}</Text>
+            <Text style={styles.statTitle}>Books Listed</Text>
+            <Text style={styles.statDesc}>By your college</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Ionicons name="eye-outline" size={20} color={COLORS.primary} style={styles.statIcon} />
+            <Text style={styles.statNum}>{totalCollegeViews}</Text>
+            <Text style={styles.statTitle}>Total Views</Text>
+            <Text style={styles.statDesc}>On college books</Text>
+          </View>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderBooksSection = () => {
+    if (collegeBooks.length === 0) return null;
+
+    return (
+      <View style={styles.booksSection}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitleSmall}>Books from Your College</Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.booksScrollContent}>
+          {collegeBooks.map((book: any) => (
+            <CollegeBookCard key={book.id} book={book} />
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderTopColleges = () => {
+    if (colleges.length === 0) return null;
+
+    return (
+      <View style={styles.topCollegesSection}>
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitleSmall}>Participating Colleges</Text>
+            <Text style={styles.sectionSubSmall}>Colleges active on BookMart</Text>
+          </View>
+        </View>
+
+        <View style={styles.leaderboardList}>
+          {colleges.slice(0, 5).map((college: any, index: number) => {
+            const count = allListings.filter((l: any) => l.seller?.profile?.college?.id === college.id).length;
+            return (
+              <View key={college.id} style={styles.leaderboardItem}>
+                <Text style={styles.rankText}>{index + 1}</Text>
+                <View style={styles.collegeLogoWrap}>
+                  <Ionicons name="school" size={18} color={COLORS.primary} />
+                </View>
+                <View style={styles.leaderboardInfo}>
+                  <Text style={styles.leaderboardName} numberOfLines={1}>
+                    {college.name}
+                  </Text>
+                  <Text style={styles.leaderboardUniv} numberOfLines={1}>
+                    {college.district ? `${college.district}, ${college.state}` : college.state}
+                  </Text>
+                </View>
+                <View style={styles.leaderboardRight}>
+                  <Text style={styles.leaderboardBooks}>{count}</Text>
+                  <Text style={styles.leaderboardBooksLabel}>Listed</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -266,7 +296,7 @@ const CollegeInsightsScreen = () => {
           <View style={styles.inviteInfo}>
             <Text style={styles.inviteTitle}>Invite More Students</Text>
             <Text style={styles.inviteDesc}>
-              Help more students from your {"\n"} college discover and buy & sell books.
+              Help more students from your college discover and buy & sell books.
             </Text>
           </View>
           <Button
@@ -298,8 +328,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: rem(1),
     fontFamily: FONTS.montserrat.bold,
-    color: COLORS.black,
-    marginBottom: 4,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
   },
   sectionSub: {
     fontSize: rem(0.75),
@@ -308,27 +338,27 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   collegeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.grayLight,
-    borderRadius: 12,
-    padding: SPACING.sm,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
-    marginBottom: SPACING.lg,
+    borderColor: "rgba(0,0,0,0.05)",
+    marginBottom: SPACING.md,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   collegeCardLeft: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
-    paddingRight: SPACING.sm,
   },
   collegeIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.blueLight,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.secondary,
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.sm,
@@ -337,154 +367,88 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   collegeName: {
-    fontSize: rem(0.71875),
-    fontFamily: FONTS.montserrat.bold,
-    color: COLORS.text,
+    fontSize: rem(0.875),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
   },
   collegeUniv: {
-    fontSize: rem(0.59375),
+    fontSize: rem(0.6875),
     fontFamily: FONTS.manrope.medium,
     color: COLORS.textMuted,
     marginTop: 2,
   },
-  changeCollegeBtn: {
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  changeCollegeText: {
-    fontSize: rem(0.625),
-    fontFamily: FONTS.montserrat.semibold,
-    color: COLORS.primary,
-  },
   statsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     gap: SPACING.sm,
   },
   statBox: {
     flex: 1,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: SPACING.sm,
     borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
+    borderColor: "rgba(0,0,0,0.05)",
     alignItems: "center",
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.03,
     shadowRadius: 4,
+    elevation: 1,
   },
   statIcon: {
     marginBottom: 4,
   },
   statNum: {
-    fontSize: rem(1.125),
+    fontSize: rem(1),
     fontFamily: FONTS.montserrat.bold,
-    color: COLORS.primary,
-    marginBottom: 4,
+    color: COLORS.black,
   },
   statTitle: {
-    fontSize: rem(0.5625),
-    fontFamily: FONTS.manrope.medium,
+    fontSize: rem(0.6875),
+    fontFamily: FONTS.manrope.semibold,
     color: COLORS.text,
     textAlign: "center",
   },
   statDesc: {
-    fontSize: rem(0.5),
-    fontFamily: FONTS.manrope.regular,
-    color: COLORS.textMuted,
-    textAlign: "center",
-    marginTop: 2,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.md,
-  },
-  sectionTitleSmall: {
-    fontSize: rem(0.875),
-    fontFamily: FONTS.montserrat.bold,
-    color: COLORS.text,
-  },
-  sectionSubSmall: {
-    fontSize: rem(0.625),
-    fontFamily: FONTS.manrope.medium,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  filterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  filterText: {
-    fontSize: rem(0.625),
-    fontFamily: FONTS.manrope.semibold,
-    color: COLORS.text,
-  },
-  axisText: {
     fontSize: rem(0.5625),
     fontFamily: FONTS.manrope.regular,
     color: COLORS.textMuted,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendLine: {
-    width: 16,
-    height: 2,
-  },
-  legendText: {
-    fontSize: rem(0.59375),
-    fontFamily: FONTS.manrope.medium,
-    color: COLORS.textMuted,
+    textAlign: "center",
   },
   booksSection: {
     marginBottom: SPACING.xl,
   },
-  viewAllRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  sectionHeaderRow: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
-  viewAllText: {
+  sectionTitleSmall: {
+    fontSize: rem(0.9375),
+    fontFamily: FONTS.montserrat.bold,
+    color: COLORS.text,
+  },
+  sectionSubSmall: {
     fontSize: rem(0.6875),
-    fontFamily: FONTS.montserrat.semibold,
-    color: COLORS.primary,
+    fontFamily: FONTS.manrope.medium,
+    color: COLORS.textMuted,
   },
   booksScrollContent: {
     paddingHorizontal: SPACING.lg,
     gap: SPACING.sm,
   },
   bookCardContainer: {
-    width: 130,
+    width: 120,
+    marginRight: SPACING.sm,
   },
   bookCard: {
-    width: 130,
-    height: 160,
-    backgroundColor: COLORS.secondary,
     borderRadius: 12,
-    padding: 8,
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    marginBottom: 8,
+    overflow: "hidden",
+    backgroundColor: COLORS.white,
+    marginBottom: 6,
   },
   bookCoverWrap: {
-    width: "100%",
-    height: "100%",
+    width: 120,
+    height: 160,
     position: "relative",
   },
   bookCover: {
@@ -493,113 +457,98 @@ const styles = StyleSheet.create({
   },
   favBtn: {
     position: "absolute",
-    top: -4,
-    right: -4,
+    top: 6,
+    right: 6,
+    backgroundColor: COLORS.white,
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: COLORS.white,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
-    zIndex: 2,
   },
   burstContainer: {
     position: "absolute",
-    top: "50%",
-    left: "50%",
-    width: 10,
-    height: 10,
-    marginLeft: -5,
-    marginTop: -5,
-    alignItems: "center",
-    justifyContent: "center",
-    pointerEvents: "none",
-    zIndex: 1,
   },
   bookTitle: {
-    fontSize: rem(0.6875),
-    fontFamily: FONTS.manrope.bold,
-    color: COLORS.text,
-    marginBottom: 2,
+    fontSize: rem(0.75),
+    fontFamily: FONTS.manrope.semibold,
+    color: COLORS.black,
   },
   bookAuthor: {
-    fontSize: rem(0.5625),
-    fontFamily: FONTS.manrope.medium,
+    fontSize: rem(0.65),
+    fontFamily: FONTS.manrope.regular,
     color: COLORS.textMuted,
-    marginBottom: 4,
   },
   bookPrice: {
     fontSize: rem(0.75),
-    fontFamily: FONTS.montserrat.bold,
+    fontFamily: FONTS.manrope.bold,
     color: COLORS.primary,
+    marginTop: 2,
   },
   bookMetrics: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    gap: 8,
+    marginTop: 4,
   },
   metricItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 2,
   },
   metricText: {
-    fontSize: rem(0.5625),
-    fontFamily: FONTS.manrope.regular,
+    fontSize: rem(0.6),
+    fontFamily: FONTS.manrope.medium,
     color: COLORS.textMuted,
   },
   topCollegesSection: {
+    paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.xl,
   },
   leaderboardList: {
-    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
+    overflow: "hidden",
   },
   leaderboardItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.grayHeavvy,
+    padding: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0,0,0,0.06)",
   },
   rankText: {
-    fontSize: rem(0.75),
+    fontSize: rem(0.875),
     fontFamily: FONTS.montserrat.bold,
     color: COLORS.primary,
-    width: 20,
+    width: 24,
   },
   collegeLogoWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.grayLight,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.secondary,
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
-  },
-  collegeLogo: {
-    width: 20,
-    height: 20,
   },
   leaderboardInfo: {
     flex: 1,
-    paddingRight: SPACING.sm,
   },
   leaderboardName: {
-    fontSize: rem(0.6875),
-    fontFamily: FONTS.montserrat.bold,
-    color: COLORS.text,
-    marginBottom: 2,
+    fontSize: rem(0.75),
+    fontFamily: FONTS.manrope.semibold,
+    color: COLORS.black,
   },
   leaderboardUniv: {
-    fontSize: rem(0.5625),
-    fontFamily: FONTS.manrope.medium,
+    fontSize: rem(0.625),
+    fontFamily: FONTS.manrope.regular,
     color: COLORS.textMuted,
   },
   leaderboardRight: {
@@ -607,22 +556,21 @@ const styles = StyleSheet.create({
   },
   leaderboardBooks: {
     fontSize: rem(0.8125),
-    fontFamily: FONTS.montserrat.bold,
-    color: COLORS.primary,
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
   },
   leaderboardBooksLabel: {
     fontSize: rem(0.5625),
-    fontFamily: FONTS.manrope.medium,
-    color: COLORS.primary,
+    fontFamily: FONTS.manrope.regular,
+    color: COLORS.textMuted,
   },
   inviteCard: {
     marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.xl,
-    backgroundColor: COLORS.grayLight,
-    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     padding: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.grayHeavvy,
+    borderColor: "rgba(0,0,0,0.05)",
     flexDirection: "row",
     alignItems: "center",
   },
@@ -630,34 +578,31 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.purplelight,
+    backgroundColor: COLORS.secondary,
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.sm,
   },
   inviteInfo: {
-    marginRight: SPACING.sm,
+    flex: 1,
   },
   inviteTitle: {
-    fontSize: rem(0.75),
-    fontFamily: FONTS.montserrat.bold,
-    color: COLORS.text,
-    marginBottom: 4,
+    fontSize: rem(0.8125),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
   },
   inviteDesc: {
-    fontSize: rem(0.59375),
-    fontFamily: FONTS.manrope.medium,
+    fontSize: rem(0.625),
+    fontFamily: FONTS.manrope.regular,
     color: COLORS.textMuted,
-    lineHeight: 14,
   },
   inviteBtn: {
-    height: rem(2),
-    width: rem(4.375),
-    alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    height: 32,
+    borderRadius: 16,
   },
   inviteBtnText: {
-    fontSize: rem(0.75),
-    fontFamily: FONTS.manrope.medium,
+    fontSize: rem(0.6875),
   },
 });

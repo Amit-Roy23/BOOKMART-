@@ -6,6 +6,7 @@ import ExcellentCondition from "@/components/smallComp/ExcellentCondition";
 import PeopleViewing from "@/components/smallComp/PeopleViewing";
 import RecentlyAdded from "@/components/smallComp/RecentlyAdded";
 import SponsoredSection from "@/components/smallComp/SponsoredSection";
+import MyListingsSection from "@/components/smallComp/MyListingsSection";
 import AuthorsSection, { AuthorItem } from "@/components/ui/AuthorsSection";
 import GenreSection from "@/components/ui/GenreSection";
 import HomeHeader from "@/components/ui/HomeHeader";
@@ -14,20 +15,25 @@ import NearestBooks from "@/components/ui/NearestBooks";
 import PromoBanner, { PromoBannerItem } from "@/components/ui/PromoBanner";
 import SearchBar from "@/components/ui/SearchBar";
 import { COLORS } from "@/constants/colors";
+import { FONTS } from "@/constants/fonts";
+import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
-import { useNavigation, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation, router, useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useMemo } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useMemo, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const [refreshing, setRefreshing] = useState(false);
 
   // ── Queries ──
-  const { data: userProfile } = useQuery({
+  const { data: userProfile, refetch: refetchProfile } = useQuery({
     queryKey: ["userProfile"],
     queryFn: async () => {
       const response = await api.get("/api/v1/core/profile/me/");
@@ -47,7 +53,7 @@ const HomeScreen = () => {
     },
   });
 
-  const { data: recommendationsData } = useQuery({
+  const { data: recommendationsData, refetch: refetchRecommendations } = useQuery({
     queryKey: ["recommendations"],
     queryFn: async () => {
       const response = await api.get("/api/v1/book/recommendations/");
@@ -55,7 +61,7 @@ const HomeScreen = () => {
     },
   });
 
-  const { data: authorsData } = useQuery({
+  const { data: authorsData, refetch: refetchAuthors } = useQuery({
     queryKey: ["authors"],
     queryFn: async () => {
       const response = await api.get("/api/v1/book/authors/");
@@ -63,107 +69,167 @@ const HomeScreen = () => {
     },
   });
 
-  const currentUserId = userProfile?.user_id;
-  const currentUserEmail = userProfile?.email;
-
-  const isOwnListing = useCallback(
-    (item: any) => {
-      if (!item) return false;
-      const sellerId = item.seller?.id ?? item.seller_id;
-      const sellerEmail = item.seller?.email;
-      if (currentUserId && sellerId === currentUserId) return true;
-      if (currentUserEmail && sellerEmail && sellerEmail.toLowerCase() === currentUserEmail.toLowerCase()) return true;
-      return false;
-    },
-    [currentUserId, currentUserEmail]
+  useFocusEffect(
+    useCallback(() => {
+      refetchListings();
+      refetchProfile();
+    }, [refetchListings, refetchProfile])
   );
 
-  // Filter out the user's own listings from the Home screen feeds
-  const otherListings = useMemo(() => {
-    if (!listingsData?.results) return [];
-    return listingsData.results.filter((item: any) => !isOwnListing(item));
-  }, [listingsData, isOwnListing]);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Promise.all([
+        refetchListings(),
+        refetchProfile(),
+        refetchRecommendations(),
+        refetchAuthors(),
+      ]);
+    } catch (err) {
+      console.log("Error refreshing home feed:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchListings, refetchProfile, refetchRecommendations, refetchAuthors]);
+
+  // All active listings available for Home screen feeds
+  const allListings = useMemo(() => {
+    if (!listingsData) return [];
+    return Array.isArray(listingsData) ? listingsData : listingsData?.results || [];
+  }, [listingsData]);
 
   // ── Mappers ──
   const mapListingToBook = useCallback(
     (item: any) => ({
       id: String(item.id),
-      title: item.book.title,
-      author: item.book.authors?.map((a: any) => a.name).join(", ") || "Unknown Author",
-      price: parseFloat(item.price),
+      title: item.book?.title || item.title || "Untitled Book",
+      author:
+        item.book?.authors?.map((a: any) => (typeof a === "string" ? a : a.name)).join(", ") ||
+        "Unknown Author",
+      price: typeof item.price === "number" ? item.price : parseFloat(item.price) || 0,
       coverUri:
+        item.listing_images?.find((img: any) => String(img.label || "").toUpperCase() === "FRONT_COVER")?.image_url ||
         item.listing_images?.[0]?.image_url ||
-        item.book.cover_url ||
+        item.book?.cover_url ||
         "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300&h=440&fit=crop",
-      condition: item.condition,
-      distance: item.distance_km ? `${item.distance_km.toFixed(1)}km` : "1.2km",
-      description: item.condition_notes || item.book.description || "",
-      sellerName: item.seller.full_name,
-      sellerAvatarUri:
-        item.seller.profile_image ||
-        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
+      condition: item.condition || "GOOD",
+      distance: item.distance_km ? `${item.distance_km.toFixed(1)}km` : "Nearby",
+      description: item.condition_notes || item.book?.description || "",
+      sellerName: item.seller?.full_name || "Seller",
+      sellerAvatarUri: item.seller?.profile_image || "",
       views: item.views_count || 0,
     }),
     []
   );
 
+  const currentUserId = userProfile?.user_id || userProfile?.user?.id || userProfile?.id;
+
+  // User's own listings
+  const myListings = useMemo(() => {
+    if (!allListings || allListings.length === 0 || !currentUserId) return [];
+    return allListings
+      .filter((item: any) => {
+        const sellerId = item.seller?.id ?? item.seller_id;
+        return String(sellerId) === String(currentUserId);
+      })
+      .map(mapListingToBook);
+  }, [allListings, currentUserId, mapListingToBook]);
+
   const sponsoredBooks = useMemo(() => {
-    if (!otherListings) return [];
-    return otherListings.filter((item: any) => item.is_boosted).map(mapListingToBook);
-  }, [otherListings, mapListingToBook]);
+    if (!allListings || allListings.length === 0) return [];
+    return allListings.filter((item: any) => item.is_boosted).map(mapListingToBook);
+  }, [allListings, mapListingToBook]);
 
   const nearestBooks = useMemo(() => {
-    if (!otherListings) return [];
-    return otherListings.slice(0, 6).map(mapListingToBook);
-  }, [otherListings, mapListingToBook]);
+    if (!allListings || allListings.length === 0) return [];
+    return allListings.slice(0, 6).map(mapListingToBook);
+  }, [allListings, mapListingToBook]);
 
   const collegeBooks = useMemo(() => {
-    if (!otherListings) return [];
+    if (!allListings || allListings.length === 0) return [];
     const collegeId = userProfile?.college?.id;
-    const filtered = otherListings.filter(
+    const filtered = allListings.filter(
       (item: any) => !collegeId || item.seller?.profile?.college?.id === collegeId
     );
-    return (filtered.length > 0 ? filtered : otherListings).slice(0, 6).map(mapListingToBook);
-  }, [otherListings, userProfile, mapListingToBook]);
+    return (filtered.length > 0 ? filtered : allListings).slice(0, 6).map(mapListingToBook);
+  }, [allListings, userProfile, mapListingToBook]);
 
   const recentlyAdded = useMemo(() => {
-    if (!otherListings) return [];
-    return [...otherListings]
+    if (!allListings || allListings.length === 0) return [];
+    return [...allListings]
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 6)
       .map(mapListingToBook);
-  }, [otherListings, mapListingToBook]);
+  }, [allListings, mapListingToBook]);
 
   const excellentCondition = useMemo(() => {
-    if (!otherListings) return [];
-    return otherListings
+    if (!allListings || allListings.length === 0) return [];
+    return allListings
       .filter((item: any) => item.condition === "NEW" || item.condition === "LIKE_NEW")
       .slice(0, 6)
       .map(mapListingToBook);
-  }, [otherListings, mapListingToBook]);
+  }, [allListings, mapListingToBook]);
 
   const peopleViewing = useMemo(() => {
-    if (!otherListings) return [];
-    return [...otherListings]
+    if (!allListings || allListings.length === 0) return [];
+    return [...allListings]
       .sort((a: any, b: any) => (b.views_count || 0) - (a.views_count || 0))
       .slice(0, 5)
       .map(mapListingToBook);
-  }, [otherListings, mapListingToBook]);
+  }, [allListings, mapListingToBook]);
+
+  const calculateTimeLeft = useCallback((createdAt?: string): string => {
+    if (!createdAt) return "12d left";
+    const createdTime = new Date(createdAt).getTime();
+    if (isNaN(createdTime)) return "12d left";
+
+    const now = Date.now();
+    const elapsedMs = Math.max(0, now - createdTime);
+    const totalUltimatumMs = 12 * 24 * 60 * 60 * 1000;
+    const remainingMs = totalUltimatumMs - elapsedMs;
+
+    if (remainingMs <= 0) {
+      return "Ending today";
+    }
+
+    const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    if (remainingDays > 1) {
+      return `${remainingDays}d left`;
+    }
+
+    const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+    if (remainingHours > 1) {
+      return `${remainingHours}h left`;
+    }
+
+    return "Ending today";
+  }, []);
 
   const endingSoon = useMemo(() => {
-    if (!otherListings) return [];
-    return otherListings.slice(0, 5).map((item: any) => ({
-      ...mapListingToBook(item),
-      timeLeft: "12h left",
-    }));
-  }, [otherListings, mapListingToBook]);
+    if (!allListings || allListings.length === 0) return [];
+    return [...allListings]
+      .map((item: any) => {
+        const createdTime = item.created_at ? new Date(item.created_at).getTime() : Date.now();
+        const elapsedMs = Math.max(0, Date.now() - (isNaN(createdTime) ? Date.now() : createdTime));
+        const totalUltimatumMs = 12 * 24 * 60 * 60 * 1000;
+        const remainingMs = totalUltimatumMs - elapsedMs;
+        return {
+          ...mapListingToBook(item),
+          remainingMs,
+          timeLeft: calculateTimeLeft(item.created_at),
+        };
+      })
+      .sort((a, b) => a.remainingMs - b.remainingMs)
+      .slice(0, 6);
+  }, [allListings, mapListingToBook, calculateTimeLeft]);
 
   const editorsChoice = useMemo(() => {
     if (!recommendationsData?.results || recommendationsData.results.length === 0) return null;
     for (const item of recommendationsData.results) {
-      const allListings = item.ranked_listings || item.listings || [];
-      const validListing = allListings.find((l: any) => !isOwnListing(l));
-      if (validListing) {
+      const allRecListings = item.ranked_listings || item.listings || [];
+      if (allRecListings.length > 0) {
+        const validListing = allRecListings[0];
         return {
           id: String(validListing.id),
           title: item.title,
@@ -179,16 +245,15 @@ const HomeScreen = () => {
       }
     }
     return null;
-  }, [recommendationsData, isOwnListing]);
+  }, [recommendationsData]);
 
   const authors = useMemo(() => {
-    if (!authorsData?.results || !otherListings) return [];
+    if (!authorsData?.results || !allListings || allListings.length === 0) return [];
 
-    // Collect all author IDs and author names present in listings from OTHER sellers
     const activeAuthorIds = new Set<string>();
     const activeAuthorNames = new Set<string>();
 
-    for (const item of otherListings) {
+    for (const item of allListings) {
       if (item.book?.authors && Array.isArray(item.book.authors)) {
         for (const a of item.book.authors) {
           if (a.id) activeAuthorIds.add(String(a.id));
@@ -210,7 +275,7 @@ const HomeScreen = () => {
         bio: item.bio || "",
         rating: parseFloat(item.rating) || 5,
       }));
-  }, [authorsData, otherListings]);
+  }, [authorsData, allListings]);
 
   const handleNotificationPress = useCallback(() => {
     router.push("/(screens)/Notifications");
@@ -261,6 +326,8 @@ const HomeScreen = () => {
     return <HomeSkeleton />;
   }
 
+  const hasAnyListings = allListings.length > 0;
+
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
@@ -268,6 +335,8 @@ const HomeScreen = () => {
       {/* ── Header ── */}
       <HomeHeader
         locationName={userProfile?.city_location || "Campus Area"}
+        avatarUri={userProfile?.image}
+        fullName={userProfile?.full_name}
         notificationCount={3}
         onNotificationPress={handleNotificationPress}
         onAvatarPress={handleAvatarPress}
@@ -283,12 +352,31 @@ const HomeScreen = () => {
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={true}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+            progressBackgroundColor={COLORS.white}
+          />
+        }
       >
         {/* ── Promo Carousel ── */}
         <PromoBanner onCtaPress={handleCtaPress} />
 
-        {/* ── Genres ── */}
+        {/* ── Categories ── */}
         <GenreSection />
+
+        {/* ── User's Own Active Listings ── */}
+        {myListings.length > 0 && (
+          <MyListingsSection
+            books={myListings}
+            onBookPress={handleBookPress}
+            onManagePress={() => router.push("/(screens)/MyActiveListings" as any)}
+            onAddPress={() => router.push("/(tabs)/create" as any)}
+          />
+        )}
 
         {/* ── Trending / Sponsored ── */}
         {sponsoredBooks.length > 0 && <SponsoredSection books={sponsoredBooks} onBookPress={handleBookPress} />}
@@ -316,6 +404,7 @@ const HomeScreen = () => {
         {excellentCondition.length > 0 && (
           <ExcellentCondition title="Excellent Condition" books={excellentCondition} onBookPress={handleBookPress} />
         )}
+
         {/* ── People Are Viewing ── */}
         {peopleViewing.length > 0 && (
           <PeopleViewing title="People Are Viewing" books={peopleViewing} onBookPress={handleBookPress} />
@@ -324,8 +413,26 @@ const HomeScreen = () => {
         {/* ── Ending Soon ── */}
         {endingSoon.length > 0 && <EndingSoon title="Ending Soon" books={endingSoon} onBookPress={handleBookPress} />}
 
-        {/* ── Editor's Choice ── */}
-        {/* {editorsChoice && <EditorsChoiceComp item={editorsChoice} onBookPress={handleBookPress} />} */}
+        {/* ── Empty State when no book listings are available ── */}
+        {!hasAnyListings && (
+          <View style={styles.emptyStateContainer}>
+            <View style={styles.emptyStateIconWrap}>
+              <Ionicons name="book-outline" size={36} color={COLORS.primary} />
+            </View>
+            <Text style={styles.emptyStateTitle}>No Book Listings Yet</Text>
+            <Text style={styles.emptyStateSubtitle}>
+              Be the first in your campus or neighborhood to list a pre-owned book!
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.emptyStateButton}
+              onPress={() => router.push("/(tabs)/create" as any)}
+            >
+              <Ionicons name="add-circle" size={18} color={COLORS.white} style={{ marginRight: 6 }} />
+              <Text style={styles.emptyStateButtonText}>List a Book</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -344,4 +451,59 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: rem(7.5), // room for floating tab bar
   },
+  emptyStateContainer: {
+    marginHorizontal: SPACING.lg,
+    marginTop: rem(1.5),
+    padding: rem(1.5),
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  emptyStateIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: rem(1),
+    fontFamily: FONTS.manrope.bold,
+    color: COLORS.black,
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    fontSize: rem(0.75),
+    fontFamily: FONTS.manrope.regular,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  emptyStateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  emptyStateButtonText: {
+    fontSize: rem(0.75),
+    fontFamily: FONTS.manrope.semibold,
+    color: COLORS.white,
+  },
 });
+

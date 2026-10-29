@@ -51,8 +51,7 @@ const FeaturedCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const SideRowCard = memo(
@@ -81,8 +80,7 @@ const SideRowCard = memo(
         </View>
       </Pressable>
     );
-  },
-  (prev, next) => prev.item.id === next.item.id
+  }
 );
 
 const RecentlyAdded: React.FC<RecentlyAddedProps> = memo(

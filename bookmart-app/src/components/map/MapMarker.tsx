@@ -1,14 +1,14 @@
 import { COLORS } from "@/constants/colors";
+import { Ionicons } from "@expo/vector-icons";
+import React from "react";
+import { StyleSheet, View } from "react-native";
+
 interface NearestBook {
   id: string;
   title: string;
   latitude?: number;
   longitude?: number;
 }
-import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 
 interface MapMarkerProps {
   book: NearestBook;
@@ -16,37 +16,20 @@ interface MapMarkerProps {
   hasSelection: boolean;
 }
 
-const MapMarker: React.FC<MapMarkerProps> = ({ book, isSelected, hasSelection }) => {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    if (isSelected) {
-      scale.value = withSpring(1.3, { damping: 12, stiffness: 100 });
-      opacity.value = withTiming(1, { duration: 200 });
-    } else if (hasSelection) {
-      scale.value = withSpring(0.85, { damping: 15, stiffness: 100 });
-      opacity.value = withTiming(0.6, { duration: 200 });
-    } else {
-      scale.value = withSpring(1, { damping: 12, stiffness: 100 });
-      opacity.value = withTiming(1, { duration: 200 });
-    }
-  }, [isSelected, hasSelection]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scale.value }],
-      opacity: opacity.value,
-      zIndex: isSelected ? 10 : 1,
-    };
-  });
-
+const MapMarker: React.FC<MapMarkerProps> = ({ isSelected, hasSelection }) => {
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
-      <View style={[styles.bubble, isSelected && styles.bubbleSelected]}>
-        <Ionicons name="book" size={14} color={isSelected ? COLORS.white : COLORS.white} />
+    <View style={styles.container}>
+      <View
+        style={[
+          styles.bubble,
+          isSelected && styles.bubbleSelected,
+          hasSelection && !isSelected && styles.bubbleDimmed,
+        ]}
+      >
+        <Ionicons name="book" size={isSelected ? 16 : 13} color={COLORS.white} />
       </View>
-    </Animated.View>
+      {isSelected && <View style={styles.pinTip} />}
+    </View>
   );
 };
 
@@ -58,25 +41,48 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bubble: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderRadius: 16,
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
     elevation: 6,
     borderWidth: 2,
     borderColor: COLORS.white,
-    margin: 10,
   },
   bubbleSelected: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.secondary,
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+    borderColor: "#E0F2FE",
+    borderWidth: 3,
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 10,
+    transform: [{ scale: 1.1 }],
+  },
+  bubbleDimmed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.9 }],
+  },
+  pinTip: {
+    width: 0,
+    height: 0,
+    backgroundColor: "transparent",
+    borderStyle: "solid",
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderBottomWidth: 0,
+    borderTopWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: COLORS.primary,
+    marginTop: -2,
   },
 });

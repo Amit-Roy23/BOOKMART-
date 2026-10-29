@@ -30,7 +30,10 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"],
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
       "googleServicesFile": "./google-services.json"
     },
     "web": {
@@ -53,10 +56,11 @@
       "@react-native-community/datetimepicker"
     ],
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "831b228a-59fb-4a4b-a0a0-c820893168ac"
+        "projectId": "84a700f7-7085-4a80-8c6f-06ca6b661ceb"
       }
     },
-    "owner": "bookmart-expo"
+    "owner": "amit_roy06"
   }
 }

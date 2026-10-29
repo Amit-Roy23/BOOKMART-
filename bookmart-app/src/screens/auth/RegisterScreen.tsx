@@ -246,7 +246,7 @@ const RegisterScreen: React.FC = () => {
           <View style={styles.card}>
             <Input
               label="Full Name"
-              placeholder="John Doe"
+              placeholder="Enter your full name"
               value={fullname}
               onChangeText={setFullname}
               autoComplete="name"

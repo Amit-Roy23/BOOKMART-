@@ -5,9 +5,18 @@ import { SPACING } from "@/constants/spacings";
 import { rem } from "@/utils/responsive";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router, useNavigation } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { router, useNavigation, useFocusEffect } from "expo-router";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { LineChart } from "react-native-gifted-charts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
@@ -24,9 +33,10 @@ const AnalyticsScreen = () => {
 
   const [selectedMetric, setSelectedMetric] = useState<MetricType>("views");
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeType>("daily");
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch current user profile
-  const { data: userProfile } = useQuery({
+  const { data: userProfile, refetch: refetchProfile } = useQuery({
     queryKey: ["userProfile"],
     queryFn: async () => {
       const response = await api.get("/api/v1/core/profile/me/");
@@ -35,13 +45,36 @@ const AnalyticsScreen = () => {
   });
 
   // Fetch listings to get seller's books analytics
-  const { data: listingsData, isLoading: isLoadingListings } = useQuery({
+  const {
+    data: listingsData,
+    isLoading: isLoadingListings,
+    refetch: refetchListings,
+  } = useQuery({
     queryKey: ["all-listings"],
     queryFn: async () => {
       const response = await api.get("/api/v1/marketplace/listings/");
       return response.data;
     },
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchListings();
+      refetchProfile();
+    }, [refetchListings, refetchProfile])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Promise.all([refetchListings(), refetchProfile()]);
+    } catch (err) {
+      console.log("Error refreshing analytics:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchListings, refetchProfile]);
 
   const myListings = useMemo(() => {
     if (!listingsData?.results || !userProfile?.user_id) return [];
@@ -175,7 +208,19 @@ const AnalyticsScreen = () => {
           <BookCardSkeleton />
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+              progressBackgroundColor={COLORS.white}
+            />
+          }
+        >
           <Text style={styles.headerSubtitle}>Your Bookshelf</Text>
           {/* Summary Cards */}
           <View style={styles.summaryRow}>

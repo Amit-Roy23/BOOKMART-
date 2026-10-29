@@ -96,7 +96,7 @@ class BookListingFilter(django_filters.FilterSet):
     ),
 )
 class BookListingViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     search_fields = ["book__title", "book__authors__name"]
@@ -140,9 +140,12 @@ class BookListingViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        from django.db.models import F
-        BookListing.objects.filter(pk=instance.pk).update(views_count=F('views_count') + 1)
-        instance.refresh_from_db()
+        user = request.user
+        is_own_listing = user.is_authenticated and (instance.seller_id == user.id)
+        if not is_own_listing:
+            from django.db.models import F
+            BookListing.objects.filter(pk=instance.pk).update(views_count=F('views_count') + 1)
+            instance.refresh_from_db()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
